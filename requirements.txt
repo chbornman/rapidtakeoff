@@ -1,1 +1,3 @@
 ezdxf>=0.18
+svgwrite>=1.4.1  # required for ezdxf SVG backend
+pillow>=9.0.0   # required for ezdxf drawing add-on (PIL.Image)

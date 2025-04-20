@@ -14,7 +14,7 @@ Install Python dependencies (for DXF parsing). To avoid system Python issues, us
 python3 -m venv .venv
 source .venv/bin/activate
 
-# Then install requirements
+# Then install requirements (includes ezdxf, svgwrite, and pillow for the drawing add-on)
 pip install -r requirements.txt
 ```
 
@@ -27,29 +27,14 @@ pip3 install --user --break-system-packages -r requirements.txt
 Start the app in development mode:
 
 ```bash
+# Using the development launcher script (recommended)
+chmod +x dev.sh
+./dev.sh
+
+# Or manual steps:
 # Activate the Python virtual environment so Electron can find ezdxf:
-source .venv/bin/activate  # or use your preferred venv tool
-# Now start development servers:
-bun run dev
-```
-
-## Build
-
-```bash
-bun run build
-bun run start
-```
-## Development
-
-Install dependencies:
-
-```bash
-bun install
-```
-
-Start the app in development mode:
-
-```bash
+source .venv/bin/activate
+# Then start development servers:
 bun run dev
 ```
 

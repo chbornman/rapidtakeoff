@@ -6,15 +6,29 @@ import {
   DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import TabNavigator from './TabNavigator';
+import { SVGRendererConfig, DEFAULT_SVG_CONFIG } from '../renderer_constants';
 
-export default function LeftSidebar({ onAccount, onSettings, onFileLoad }) {
-  // open file dialog and parse DXF
+interface LeftSidebarProps {
+  onAccount: () => void;
+  onSettings: () => void;
+  onSvgLoad: (svg: string, filePath: string) => void;
+  rendererConfig?: SVGRendererConfig;
+}
+
+export default function LeftSidebar({ 
+  onAccount, 
+  onSettings, 
+  onSvgLoad,
+  rendererConfig = DEFAULT_SVG_CONFIG 
+}: LeftSidebarProps) {
+  // open file dialog and render DXF to SVG
   const openFile = async () => {
     try {
       const { canceled, filePaths } = await window.electron.openFileDialog();
       if (canceled || !filePaths || filePaths.length === 0) return;
-      const data = await window.electron.parseDXF(filePaths[0]);
-      onFileLoad && onFileLoad(data);
+      // Render full SVG via ezdxf drawing add-on with current renderer config
+      const svg = await window.electron.renderSVG(filePaths[0], rendererConfig);
+      onSvgLoad && onSvgLoad(svg, filePaths[0]);
     } catch (err) {
       console.error('Failed to load DXF:', err);
     }
