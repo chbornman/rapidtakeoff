@@ -1,0 +1,27 @@
+{
+  "name": "rapidtakeoff-electron",
+  "version": "0.1.0",
+  "main": "main.js",
+  "private": true,
+  "packageManager": "bun@>=1.2.8",
+  "scripts": {
+    "dev:next": "next dev",
+    "dev:electron": "electron .",
+    "dev": "concurrently \"bun run dev:next\" \"bun run dev:electron\"",
+    "build": "next build",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@heroicons/react": "^2.2.0",
+    "electron": "^25.0.0",
+    "next": "^13.5.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^8.2.0",
+    "postcss": "^8.4.23",
+    "tailwindcss": "^3.3.2"
+  }
+}
