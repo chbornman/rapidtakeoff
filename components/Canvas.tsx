@@ -207,8 +207,8 @@ const Canvas: React.FC<CanvasProps> = ({
       maxY = 100;
     }
 
-    // Add more generous padding for initial view
-    const padding = Math.max((maxX - minX) * 0.2, (maxY - minY) * 0.2, 20);
+    // Add very generous padding for initial view
+    const padding = Math.max((maxX - minX) * 0.5, (maxY - minY) * 0.5, 50);
     minX -= padding;
     minY -= padding;
     maxX += padding;
@@ -234,10 +234,10 @@ const Canvas: React.FC<CanvasProps> = ({
     let newScale;
     if (boxAspectRatio > svgAspectRatio) {
       // Width is the constraint
-      newScale = canvasSize.width / boxWidth * 0.5; // Start more zoomed out (0.5 instead of 0.9)
+      newScale = canvasSize.width / boxWidth * 0.2; // Start very zoomed out (20% of available space)
     } else {
       // Height is the constraint
-      newScale = canvasSize.height / boxHeight * 0.5; // Start more zoomed out (0.5 instead of 0.9)
+      newScale = canvasSize.height / boxHeight * 0.2; // Start very zoomed out (20% of available space)
     }
     
     // Apply initial scale factor from renderer config if available
@@ -259,7 +259,8 @@ const Canvas: React.FC<CanvasProps> = ({
 
   // Mouse wheel zoom handler
   const handleMouseWheel = useCallback((event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
+    // Note: preventDefault is not used as wheel events are passive by default in modern browsers
+    // We use touchAction: 'none' style instead to prevent browser handling
     
     // Get mouse position relative to the SVG element
     const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();

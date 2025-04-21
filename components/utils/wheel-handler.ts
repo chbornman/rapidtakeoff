@@ -27,8 +27,8 @@ export const handleWheel = ({
   maxScale = 100,
   zoomFactor = 0.1,
 }: WheelHandlerOptions): WheelHandlerResult => {
-  // Prevent default browser behavior
-  event.preventDefault();
+  // Note: We can't use preventDefault in passive event listeners
+  // The touchAction: 'none' style should handle this behavior instead
   
   // Get mouse position relative to the SVG element
   const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();

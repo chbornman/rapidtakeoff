@@ -73,13 +73,21 @@ def parse_dxf(filepath: str, config: Optional[Dict[str, Any]] = None) -> Dict[st
     Returns:
         Dict mapping layer names to lists of entity data
     """
+    sys.stderr.write(f'[PYTHON] Starting to parse DXF file: {filepath}\n')
+    if config:
+        sys.stderr.write(f'[PYTHON] Using config: {config}\n')
+    
     try:
+        sys.stderr.write('[PYTHON] Reading DXF file with ezdxf\n')
         doc = ezdxf.readfile(filepath)
+        sys.stderr.write(f'[PYTHON] Successfully loaded DXF file. Version: {doc.dxfversion}\n')
     except Exception as e:
-        sys.stderr.write(f'Error reading DXF file: {e}\n')
+        sys.stderr.write(f'[PYTHON] Error reading DXF file: {e}\n')
         sys.exit(1)
     
+    sys.stderr.write('[PYTHON] Accessing modelspace\n')
     msp = doc.modelspace()
+    sys.stderr.write(f'[PYTHON] DXF modelspace accessed. Found layers: {[layer.dxf.name for layer in doc.layers]}\n')
     tree = {}
     
     # Create a RenderContext to get access to the drawing properties
@@ -88,11 +96,13 @@ def parse_dxf(filepath: str, config: Optional[Dict[str, Any]] = None) -> Dict[st
     render_context = None
     frontend = None
     try:
+        sys.stderr.write('[PYTHON] Creating render context\n')
         render_context = RenderContext(doc)
         layout_properties = LayoutProperties.from_layout(msp)
         frontend = Frontend(render_context, layout_properties)
+        sys.stderr.write('[PYTHON] Render context created successfully\n')
     except Exception as e:
-        sys.stderr.write(f'Warning: Could not create render context: {e}\n')
+        sys.stderr.write(f'[PYTHON] Warning: Could not create render context: {e}\n')
     
     # Process each entity in the model space
     for e in msp:
@@ -501,25 +511,36 @@ def parse_dxf(filepath: str, config: Optional[Dict[str, Any]] = None) -> Dict[st
     return tree
 
 def main():
+    sys.stderr.write('[PYTHON] DXF parser starting\n')
     parser = argparse.ArgumentParser(description='Parse DXF file and output JSON data')
     parser.add_argument('file', help='Path to DXF file')
     parser.add_argument('--config', help='JSON configuration string')
     args = parser.parse_args()
+    sys.stderr.write(f'[PYTHON] Arguments: file={args.file}, has_config={args.config is not None}\n')
     
     config = None
     if args.config:
         try:
+            sys.stderr.write('[PYTHON] Parsing JSON configuration\n')
             config = json.loads(args.config)
+            sys.stderr.write(f'[PYTHON] Configuration parsed successfully\n')
         except json.JSONDecodeError:
-            sys.stderr.write('Error: Invalid JSON configuration\n')
+            sys.stderr.write('[PYTHON] Error: Invalid JSON configuration\n')
             sys.exit(1)
     
     try:
         tree = parse_dxf(args.file, config)
-        json.dump(tree, sys.stdout, cls=DXFEncoder)
+        sys.stderr.write(f'[PYTHON] DXF parsed successfully. Found {len(tree)} layers with entities\n')
+        entity_count = sum(len(entities) for entities in tree.values())
+        sys.stderr.write(f'[PYTHON] Total entities parsed: {entity_count}\n')
+        sys.stderr.write('[PYTHON] Converting to JSON\n')
+        json_output = json.dumps(tree, cls=DXFEncoder)
+        sys.stderr.write(f'[PYTHON] JSON conversion complete. Output size: {len(json_output)} bytes\n')
+        sys.stdout.write(json_output)
     except Exception as e:
-        sys.stderr.write(f'Error: {str(e)}\n')
+        sys.stderr.write(f'[PYTHON] Error: {str(e)}\n')
         sys.exit(1)
+    sys.stderr.write('[PYTHON] DXF parser completed successfully\n')
 
 if __name__ == '__main__':
     main()

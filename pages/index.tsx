@@ -63,8 +63,20 @@ export default function Home() {
     console.log("Selected feature:", selectedFeature);
   }, [selectedFeature]);
 
+  // State to track file loading status to prevent duplicate processing
+  const [isLoading, setIsLoading] = useState(false);
+
   // Handle selecting a new DXF file: parse the DXF data
   const handleFileSelect = async (filePath: string) => {
+    console.log(`[REACT] Selected DXF file: ${filePath}`);
+    
+    // Prevent duplicate processing
+    if (isLoading) {
+      console.log('[REACT] Already processing a file, ignoring duplicate request');
+      return;
+    }
+    
+    setIsLoading(true);
     setDxfFilePath(filePath);
     
     try {
@@ -72,18 +84,32 @@ export default function Home() {
       let config = rendererConfig;
       if (!config) {
         try {
+          console.log('[REACT] No renderer config loaded yet, getting from main process');
           config = await window.electron.getRendererConfig();
+          console.log('[REACT] Received renderer config from main process', config);
           setRendererConfig(config);
         } catch (configErr) {
-          console.warn("Could not load renderer config:", configErr);
+          console.warn("[REACT] Could not load renderer config:", configErr);
           config = {}; // Use empty config if we can't load it
         }
       }
       
       // Parse DXF tree data with renderer config
+      console.log('[REACT] Sending file to be parsed with config', config);
       const result = await window.electron.parseDXFTree(filePath, config);
+      console.log(`[REACT] Received parsed DXF data (${result.length} bytes)`);
+      
+      console.time('[REACT] JSON parsing');
       const data = JSON.parse(result) as DXFData;
+      console.timeEnd('[REACT] JSON parsing');
+      
+      console.log(`[REACT] DXF data parsed with ${Object.keys(data).length} layers`);
+      const entityCount = Object.values(data).reduce((sum, entities) => sum + entities.length, 0);
+      console.log(`[REACT] Total entity count: ${entityCount}`);
       setDxfData(data);
+      
+      // File processing complete
+      setIsLoading(false);
       
       // Initialize layer visibility (all layers + Origin & Axes visible by default)
       const initialVisibility: LayerVisibility = { 'Origin & Axes': true };
@@ -111,8 +137,10 @@ export default function Home() {
         Object.values(data).reduce((count, entities) => count + entities.length, 0)
       } entities`);
     } catch (err) {
+      // Reset loading state on error
       console.error("Failed to parse DXF:", err);
       setDxfData(null);
+      setIsLoading(false);
     }
   };
 
@@ -137,9 +165,9 @@ export default function Home() {
   return (
     <div className="flex h-screen overflow-hidden">
       <ResizablePanel
-        defaultWidth={sizes.sidebar.width}
+        defaultWidth="300px"
         minWidth="180px"
-        maxWidth="400px"
+        maxWidth="600px"
         position="left"
       >
         <LeftSidebar

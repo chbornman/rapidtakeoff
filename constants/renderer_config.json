@@ -1,9 +1,10 @@
 {
-  "INITIAL_ZOOM": 1,
+  "INITIAL_ZOOM": 0.25,
   "MIN_ZOOM": 0.1,
   "MAX_ZOOM": 10,
   "ZOOM_IN_FACTOR": 1.1,
   "ZOOM_OUT_FACTOR": 0.9,
+  "backgroundColor": "#222222",
   "DEFAULT_SVG_CONFIG": {
     "pdsize": null,
     "pdmode": null,

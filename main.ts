@@ -55,13 +55,34 @@ ipcMain.handle('get-renderer-config', async () => {
 });
 
 // IPC for opening DXF files
+// Cache to prevent duplicate file dialog openings
+let fileDialogOpen = false;
+
 ipcMain.handle('open-file-dialog', async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ['openFile'],
-    filters: [{ name: 'DXF Files', extensions: ['dxf'] }]
-  });
-  return { canceled: result.canceled, filePaths: result.filePaths };
+  // Prevent multiple file dialogs from opening simultaneously
+  if (fileDialogOpen) {
+    console.log('[MAIN] File dialog already open, ignoring duplicate request');
+    return { canceled: true, filePaths: [] };
+  }
+  
+  console.log('[MAIN] Opening file dialog for DXF selection');
+  fileDialogOpen = true;
+  
+  try {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'DXF Files', extensions: ['dxf'] }]
+    });
+    console.log(`[MAIN] File dialog result: canceled=${result.canceled}, filePaths=${result.filePaths}`);
+    return { canceled: result.canceled, filePaths: result.filePaths };
+  } finally {
+    // Reset flag when dialog closes (whether by selection or cancellation)
+    fileDialogOpen = false;
+  }
 });
+
+// Cache for running DXF parse operations
+const parseOperations = new Map();
 
 // IPC for parsing DXF via Python script
 
@@ -108,14 +129,28 @@ const findPythonExecutable = () => {
 
 // Handler to extract component tree from DXF
 ipcMain.handle('parse-dxf-tree', async (event, filePath, config = null) => {
+  console.log(`[MAIN] Parsing DXF tree for file: ${filePath}`);
+  
+  // Check if we're already parsing this file
+  const operationKey = `${filePath}-${JSON.stringify(config)}`;
+  if (parseOperations.has(operationKey)) {
+    console.log(`[MAIN] Already parsing this file with same config, returning existing promise`);
+    return parseOperations.get(operationKey);
+  }
+  
+  console.log('[MAIN] DXF parsing config:', config);
+  
   const parseScript = path.join(__dirname, 'parse_dxf.py');
   const { spawn } = require('child_process');
   
   // Find a Python executable with ezdxf
+  console.log('[MAIN] Finding Python executable with ezdxf');
   const pythonCmd = findPythonExecutable();
   if (!pythonCmd) {
+    console.error('[MAIN] No Python executable found with ezdxf module');
     throw new Error('Python executable not found for DXF parsing. Please make sure Python 3 with ezdxf is installed.');
   }
+  console.log(`[MAIN] Found Python executable: ${pythonCmd}`);
   
   // Build command arguments
   const args = [parseScript, filePath];
@@ -125,35 +160,58 @@ ipcMain.handle('parse-dxf-tree', async (event, filePath, config = null) => {
     args.push('--config', JSON.stringify(config));
   }
   
-  console.log(`Running: ${pythonCmd} ${args.join(' ')}`);
+  console.log(`[MAIN] Running: ${pythonCmd} ${args.join(' ')}`);
   
-  return new Promise((resolve, reject) => {
+  const parsePromise = new Promise((resolve, reject) => {
     let out = '', err = '';
     const proc = spawn(pythonCmd, args);
+    console.log(`[MAIN] Python process spawned with PID: ${proc.pid}`);
     
-    proc.stdout.on('data', d => out += d.toString());
+    proc.stdout.on('data', d => {
+      const chunk = d.toString();
+      console.log(`[MAIN] Received ${chunk.length} bytes from Python stdout`);
+      out += chunk;
+    });
+    
     proc.stderr.on('data', d => {
-      err += d.toString();
-      console.error(`DXF parsing error: ${d.toString()}`);
+      const errorMsg = d.toString();
+      err += errorMsg;
+      console.error(`[MAIN] DXF parsing error: ${errorMsg}`);
     });
     
     proc.on('close', code => {
+      console.log(`[MAIN] Python process exited with code: ${code}`);
+      // Remove from operations map when done
+      parseOperations.delete(operationKey);
+      
       if (code === 0) {
         try {
           // Validate the output is valid JSON
+          console.log(`[MAIN] Validating JSON output (${out.length} bytes)`);
           JSON.parse(out);
+          console.log('[MAIN] Successfully parsed DXF data as JSON');
           resolve(out);
         } catch (e) {
+          console.error('[MAIN] Failed to parse output as JSON:', e);
           reject(`Failed to parse DXF output as JSON: ${e.message}`);
         }
       } else {
+        console.error(`[MAIN] Python process failed with code ${code}`);
         reject(err || `parse_dxf.py exited with code ${code}`);
       }
     });
     
     // Handle process errors
     proc.on('error', (err) => {
+      console.error(`[MAIN] Failed to start Python process: ${err.message}`);
+      // Remove from operations map on error
+      parseOperations.delete(operationKey);
       reject(`Failed to start Python process: ${err.message}`);
     });
   });
+  
+  // Store the promise in the operations map
+  parseOperations.set(operationKey, parsePromise);
+  
+  return parsePromise;
 });

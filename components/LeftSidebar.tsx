@@ -3,8 +3,7 @@ import ComponentTree from "./ComponentTree";
 import {
   UserCircleIcon,
   FolderIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
+  XCircleIcon,
   RocketLaunchIcon,
 } from "@heroicons/react/24/outline";
 import TabNavigator from "./TabNavigator";
@@ -46,44 +45,28 @@ export default function LeftSidebar({
   };
   // hover state for themed secondary button
   const [fileButtonHovered, setFileButtonHovered] = React.useState(false);
-  const [collapsed, setCollapsed] = React.useState(false);
+  // Removed collapsed state for better usability
   return (
     <div
       className="flex flex-col h-full"
       style={{
         backgroundColor: colors.primary.dark,
         color: colors.onPrimary,
-        width: collapsed ? sizes.sidebar.collapsedWidth : '100%',
+        width: '100%',
       }}
     >
       {/* Header with title and controls */}
       <div className="flex items-center justify-between p-2">
-        {!collapsed && (
-          <div className="flex items-center space-x-2">
-            <RocketLaunchIcon className="h-5 w-5" aria-hidden="true" />
-            <span className="text-base font-semibold">Rapid Takeoff</span>
-          </div>
-        )}
-        {!collapsed && (
-          <button onClick={onAccount} className="hover:text-white">
-            <UserCircleIcon className="h-5 w-5" aria-hidden="true" />
-          </button>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="hover:text-white"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {collapsed ? (
-            <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
-          ) : (
-            <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
-          )}
+        <div className="flex items-center space-x-2">
+          <RocketLaunchIcon className="h-5 w-5" aria-hidden="true" />
+          <span className="text-base font-semibold">Rapid Takeoff</span>
+        </div>
+        <button onClick={onAccount} className="hover:text-white">
+          <UserCircleIcon className="h-5 w-5" aria-hidden="true" />
         </button>
       </div>
-      {!collapsed && (
-        <TabNavigator
-          defaultActive="navigator"
+      <TabNavigator
+        defaultActive="navigator"
           tabs={[
             {
               id: "navigator",
@@ -91,36 +74,6 @@ export default function LeftSidebar({
               ariaLabel: "Project Navigator",
               content: (
                 <div className="p-2 space-y-2">
-                  <button
-                    onClick={openFile}
-                    className="w-full"
-                    style={{
-                      backgroundColor: fileButtonHovered
-                        ? components.button.secondary.hoverBackgroundColor
-                        : components.button.secondary.backgroundColor,
-                      color: components.button.secondary.textColor,
-                      borderRadius: components.button.secondary.borderRadius,
-                      padding: "6px 10px",
-                    }}
-                    onMouseEnter={() => setFileButtonHovered(true)}
-                    onMouseLeave={() => setFileButtonHovered(false)}
-                  >
-                    Open DXF File
-                  </button>
-                  {filePath && (
-                    <button
-                      onClick={onFileClose}
-                      className="w-full"
-                      style={{
-                        backgroundColor: components.button.secondary.backgroundColor,
-                        color: components.button.secondary.textColor,
-                        borderRadius: components.button.secondary.borderRadius,
-                        padding: "6px 10px",
-                      }}
-                    >
-                      Close DXF File
-                    </button>
-                  )}
                   <ComponentTree
                     filePath={filePath}
                     onFeatureSelect={onFeatureSelect}
@@ -132,7 +85,30 @@ export default function LeftSidebar({
             },
           ]}
         />
-      )}
+      <div className="mt-auto flex justify-center p-2 border-t border-primary-light">
+        <button
+          onClick={filePath ? onFileClose : openFile}
+          className={`px-4 py-2 rounded-md ${
+            fileButtonHovered
+              ? 'bg-primary-light text-white'
+              : 'bg-primary-main text-white'
+          } transition duration-150 w-full flex justify-center items-center space-x-2`}
+          onMouseEnter={() => setFileButtonHovered(true)}
+          onMouseLeave={() => setFileButtonHovered(false)}
+        >
+          {filePath ? (
+            <>
+              <XCircleIcon className="h-5 w-5" aria-hidden="true" />
+              <span>Close DXF File</span>
+            </>
+          ) : (
+            <>
+              <FolderIcon className="h-5 w-5" aria-hidden="true" />
+              <span>Open DXF File</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }

@@ -79,7 +79,7 @@ export default function ResizablePanel({
     >
       {children}
       <div 
-        className={`absolute cursor-col-resize w-1 h-full bg-transparent hover:bg-gray-400 hover:opacity-50 transition-colors duration-200 z-10 ${
+        className={`absolute cursor-col-resize w-3 h-full bg-transparent hover:bg-gray-400 hover:opacity-50 transition-colors duration-200 z-10 ${
           position === 'left' ? 'right-0 top-0' : 'left-0 top-0'
         }`}
         onMouseDown={handleMouseDown}
