@@ -5,11 +5,13 @@ import {
   FolderIcon,
   XCircleIcon,
   RocketLaunchIcon,
+  CalculatorIcon,
 } from "@heroicons/react/24/outline";
 import TabNavigator from "./TabNavigator";
+import EstimatorPanel from "./EstimatorPanel";
 import { colors, sizes, components } from "../styles/theme";
 
-import { SelectedFeature, LayerVisibility } from "./types";
+import { SelectedFeature, LayerVisibility, DXFData } from "./types";
 
 interface LeftSidebarProps {
   onAccount: () => void;
@@ -20,6 +22,12 @@ interface LeftSidebarProps {
   onLayerVisibilityChange: (visibility: LayerVisibility) => void;
   /** Close the currently open DXF file */
   onFileClose: () => void;
+  /** Parsed DXF data */
+  dxfData: DXFData | null;
+  /** Conversion factor from drawing units to linear feet */
+  conversionFactor: number;
+  /** Handler when conversion factor changes */
+  onConversionFactorChange: (value: number) => void;
 }
 
 export default function LeftSidebar({
@@ -29,6 +37,9 @@ export default function LeftSidebar({
   onFeatureSelect,
   onLayerVisibilityChange,
   onFileClose,
+  dxfData,
+  conversionFactor,
+  onConversionFactorChange,
 }: LeftSidebarProps) {
   // open file dialog and render DXF to SVG
   const openFile = async () => {
@@ -50,6 +61,9 @@ export default function LeftSidebar({
         backgroundColor: colors.primary.dark,
         color: colors.onPrimary,
         width: '100%',
+        maxWidth: '500px', /* Allow sidebar to expand much larger */
+        resize: 'horizontal',
+        overflow: 'auto'
       }}
     >
       {/* Header with title and controls */}
@@ -79,31 +93,61 @@ export default function LeftSidebar({
                 </div>
               ),
             },
+            {
+              id: "estimator",
+              icon: CalculatorIcon,
+              ariaLabel: "Estimator",
+              content: (
+                <div className="p-2 overflow-y-auto">
+                  <EstimatorPanel
+                    dxfData={dxfData}
+                    conversionFactor={conversionFactor}
+                  />
+                </div>
+              ),
+            },
           ]}
         />
-      <div className="mt-auto flex justify-center p-2 border-t border-primary-light">
-        <button
-          onClick={filePath ? onFileClose : openFile}
-          className={`px-4 py-2 rounded-md ${
-            fileButtonHovered
-              ? 'bg-primary-light text-white'
-              : 'bg-primary-main text-white'
-          } transition duration-150 w-full flex justify-center items-center space-x-2`}
-          onMouseEnter={() => setFileButtonHovered(true)}
-          onMouseLeave={() => setFileButtonHovered(false)}
-        >
-          {filePath ? (
-            <>
-              <XCircleIcon className="h-5 w-5" aria-hidden="true" />
-              <span>Close DXF File</span>
-            </>
-          ) : (
-            <>
-              <FolderIcon className="h-5 w-5" aria-hidden="true" />
-              <span>Open DXF File</span>
-            </>
-          )}
-        </button>
+      <div className="mt-auto p-2 border-t border-primary-light space-y-2">
+        {/* Units conversion input */}
+        <div className="flex items-center space-x-2">
+          <label className="text-sm flex items-center space-x-1">
+            <span>Units per foot:</span>
+            <input
+              type="number"
+              min="0"
+              step="0.0001"
+              className="w-20 text-black text-sm rounded px-1"
+              value={conversionFactor}
+              onChange={e => onConversionFactorChange(parseFloat(e.target.value) || 0)}
+            />
+          </label>
+        </div>
+        {/* Open/Close DXF File button */}
+        <div className="flex justify-center">
+          <button
+            onClick={filePath ? onFileClose : openFile}
+            className={`px-4 py-2 rounded-md ${
+              fileButtonHovered
+                ? 'bg-primary-light text-white'
+                : 'bg-primary-main text-white'
+            } transition duration-150 w-full flex justify-center items-center space-x-2`}
+            onMouseEnter={() => setFileButtonHovered(true)}
+            onMouseLeave={() => setFileButtonHovered(false)}
+          >
+            {filePath ? (
+              <>
+                <XCircleIcon className="h-5 w-5" aria-hidden="true" />
+                <span>Close DXF File</span>
+              </>
+            ) : (
+              <>
+                <FolderIcon className="h-5 w-5" aria-hidden="true" />
+                <span>Open DXF File</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

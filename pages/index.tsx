@@ -80,6 +80,8 @@ export default function Home() {
 
   // State to track file loading status to prevent duplicate processing
   const [isLoading, setIsLoading] = useState(false);
+  // Conversion factor: drawing units to linear feet
+  const [conversionFactor, setConversionFactor] = useState<number>(1);
 
   // Function to parse DXF data with the current config
   const parseDXFWithConfig = useCallback(async (filePath: string, config: any) => {
@@ -273,6 +275,9 @@ export default function Home() {
           onFeatureSelect={setSelectedFeature}
           onLayerVisibilityChange={handleLayerVisibilityChange}
           onFileClose={handleFileClose}
+          dxfData={dxfData}
+          conversionFactor={conversionFactor}
+          onConversionFactorChange={setConversionFactor}
         />
       </ResizablePanel>
       <div
