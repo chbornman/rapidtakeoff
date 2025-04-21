@@ -16,11 +16,14 @@ except ImportError:
     sys.exit(1)
 
 def render_svg(filepath, config_str=None):
-    """Render DXF file to SVG with minimal configuration"""
+    """Render DXF file to SVG with configuration"""
     try:
         # Read the DXF file
         doc = ezdxf.readfile(filepath)
         msp = doc.modelspace()
+        
+        # Default to component-based rendering (wireframe)
+        use_drawing_addon = False
         
         # Load renderer configuration
         if config_str:
@@ -33,12 +36,26 @@ def render_svg(filepath, config_str=None):
                 # Load configuration from JSON
                 config_dict = json.loads(config_str)
                 sys.stderr.write(f"Attempting to load config with: {config_dict}\n")
+                
+                # Check if we should use the Drawing add-on
+                if 'use_drawing_addon' in config_dict and config_dict['use_drawing_addon']:
+                    use_drawing_addon = True
+                    # Remove our custom parameter before passing to Configuration
+                    del config_dict['use_drawing_addon']
+                    
+                # Create configuration object
                 cfg = Configuration(**config_dict)
             except Exception as e:
                 sys.stderr.write(f"Error loading config JSON: {e}\n")
                 sys.exit(1)
         else:
+            # Use defaults with fill set to none for wireframe look
             cfg = Configuration()
+            # Ensure all entities render as wireframes by default
+            cfg.fill_policy = "NONE"
+            cfg.lwpolyline_fill = False
+            cfg.polyline_fill = False
+            cfg.hatch_policy = "OUTLINE"  # Only show hatch outlines
 
         # Create rendering context
         ctx = RenderContext(doc)
@@ -47,6 +64,8 @@ def render_svg(filepath, config_str=None):
         backend = SVGBackend()
         
         # Set up renderer with configuration
+        # Create Frontend directly with backend and config, without passing layout properties
+        # This is needed for compatibility with newer ezdxf versions
         frontend = Frontend(ctx, backend, config=cfg)
         
         # Render the model space
@@ -65,9 +84,23 @@ def render_svg(filepath, config_str=None):
         # Get the SVG as a string
         svg = backend.get_string(page)
         
-        # Add a test rectangle to verify rendering
-        test_rect = '<rect x="10" y="10" width="50" height="50" fill="red" stroke="black" stroke-width="2" />'
-        svg = svg.replace('</svg>', test_rect + '</svg>')
+        # Add metadata about which renderer mode was used
+        svg = svg.replace('<svg ', f'<svg data-renderer-mode="{("ezdxf" if use_drawing_addon else "component")}" ')
+        
+        # If not using Drawing add-on, modify SVG for wireframe rendering
+        if not use_drawing_addon:
+            # Brute force approach: Force SVG to use wireframe mode by directly modifying SVG XML
+            # Replace any fill declarations with none
+            svg = svg.replace('fill="#', 'fill="none" data-original-fill="#')
+            svg = svg.replace('fill="rgb', 'fill="none" data-original-fill="rgb')
+            
+            # Handle single quotes too
+            svg = svg.replace("fill='#", "fill='none' data-original-fill='#")
+            svg = svg.replace("fill='rgb", "fill='none' data-original-fill='rgb")
+            
+            # Force fill-opacity to 0
+            svg = svg.replace('fill-opacity="', 'fill-opacity="0" data-original-opacity="')
+            svg = svg.replace("fill-opacity='", "fill-opacity='0' data-original-opacity='")
         
         # Output the SVG to stdout
         sys.stdout.write(svg)

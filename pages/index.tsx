@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import type { SelectedFeature, DXFData, LayerVisibility } from "../components/types";
+import type { SelectedFeature, DXFData, LayerVisibility, RenderingMode } from "../components/types";
 import LeftSidebar from "../components/LeftSidebar";
 // import RightSidebar from "../components/RightSidebar"; // Removed right sidebar
 import Modal from "../components/Modal";
@@ -38,6 +38,7 @@ export default function Home() {
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [rendererConfig, setRendererConfig] = useState<any>({});
+  const [renderingMode, setRenderingMode] = useState<RenderingMode>('component');
   
   // Load component-based renderer config from JSON file
   useEffect(() => {
@@ -100,18 +101,70 @@ export default function Home() {
   // Use a ref to track the previous config to avoid unnecessary reloads
   const prevConfigRef = React.useRef<string>("");
   
-  // Effect to reload the current DXF file when the config changes
+  // Add an event listener for rendering mode changes
   useEffect(() => {
+    const handleRenderingModeChange = (event: any) => {
+      if (event.detail && event.detail.mode) {
+        // Set the new rendering mode
+        setRenderingMode(event.detail.mode);
+        
+        // Update the body attribute for CSS targeting
+        document.body.setAttribute('data-rendering-mode', event.detail.mode);
+        
+        // Force refresh if requested and we have a file loaded
+        if (event.detail.forceRefresh && dxfFilePath && !isLoading) {
+          console.log(`[REACT] Forcing refresh for renderer change to ${event.detail.mode}`);
+          
+          // Clone the current config with the new rendering mode
+          const refreshConfig = {
+            ...rendererConfig,
+            renderingMode: event.detail.mode,
+            _timestamp: Date.now() // Add timestamp to force cache miss
+          };
+          
+          // Trigger a re-render with the current file
+          setIsLoading(true);
+          parseDXFWithConfig(dxfFilePath, refreshConfig)
+            .then(data => {
+              setDxfData(data);
+              setIsLoading(false);
+            })
+            .catch(err => {
+              console.error('[REACT] Failed to refresh with new renderer:', err);
+              setIsLoading(false);
+            });
+        }
+      }
+    };
+    
+    // Set initial body attribute
+    document.body.setAttribute('data-rendering-mode', renderingMode);
+    
+    window.addEventListener('changeRenderingMode', handleRenderingModeChange);
+    
+    return () => {
+      window.removeEventListener('changeRenderingMode', handleRenderingModeChange);
+    };
+  }, [dxfFilePath, isLoading, parseDXFWithConfig, rendererConfig]);
+  
+  // Effect to reload the current DXF file when the config changes or rendering mode changes
+  useEffect(() => {
+    // Create a merged config with the rendering mode
+    const mergedConfig = {
+      ...rendererConfig,
+      renderingMode: renderingMode
+    };
+    
     // Stringify config for comparison
-    const configStr = JSON.stringify(rendererConfig);
+    const configStr = JSON.stringify(mergedConfig);
     
     // Only reload if we have a file already loaded and the config actually changed
     if (dxfFilePath && 
-        rendererConfig && 
-        Object.keys(rendererConfig).length > 0 && 
+        mergedConfig && 
+        Object.keys(mergedConfig).length > 0 && 
         configStr !== prevConfigRef.current) {
       
-      console.log('[REACT] Config changed, reloading current DXF file');
+      console.log('[REACT] Config or rendering mode changed, reloading current DXF file');
       prevConfigRef.current = configStr;
       
       // Don't reload if we're already loading another file
@@ -121,7 +174,7 @@ export default function Home() {
       setIsLoading(true);
       
       // Re-parse the DXF with the new config
-      parseDXFWithConfig(dxfFilePath, rendererConfig)
+      parseDXFWithConfig(dxfFilePath, mergedConfig)
         .then(data => {
           setDxfData(data);
           setIsLoading(false);
@@ -134,7 +187,7 @@ export default function Home() {
       // Just update the ref if we don't need to reload
       prevConfigRef.current = configStr;
     }
-  }, [rendererConfig, dxfFilePath, isLoading, parseDXFWithConfig]);
+  }, [rendererConfig, renderingMode, dxfFilePath, isLoading, parseDXFWithConfig]);
 
   // Handle selecting a new DXF file: parse the DXF data
   const handleFileSelect = async (filePath: string) => {
@@ -238,7 +291,7 @@ export default function Home() {
             layerVisibility={layerVisibility}
             selectedFeature={selectedFeature}
             onFeatureSelect={setSelectedFeature}
-            rendererConfig={rendererConfig}
+            rendererConfig={{...rendererConfig, renderingMode}}
           />
         )}
       </div>

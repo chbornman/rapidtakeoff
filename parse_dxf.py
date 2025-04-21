@@ -119,8 +119,8 @@ def parse_dxf(filepath: str, config: Optional[Dict[str, Any]] = None) -> Dict[st
     try:
         sys.stderr.write('[PYTHON] Creating render context\n')
         render_context = RenderContext(doc)
-        layout_properties = LayoutProperties.from_layout(msp)
-        frontend = Frontend(render_context, layout_properties)
+        # Don't create the Frontend here anymore - it needs an output backend
+        # Just create the render context for the color information
         sys.stderr.write('[PYTHON] Render context created successfully\n')
     except Exception as e:
         sys.stderr.write(f'[PYTHON] Warning: Could not create render context: {e}\n')

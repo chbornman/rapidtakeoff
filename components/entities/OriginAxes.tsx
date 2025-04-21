@@ -35,6 +35,7 @@ const OriginAxes: React.FC<OriginAxesProps> = ({
         y2={0}
         stroke={xAxisColor}
         strokeWidth={strokeWidth * 1.0}
+        fill="none"
       />
       
       {/* Y Axis (vertical) - simple line */}
@@ -45,6 +46,7 @@ const OriginAxes: React.FC<OriginAxesProps> = ({
         y2={INFINITE_EXTENT}
         stroke={yAxisColor}
         strokeWidth={strokeWidth * 1.0}
+        fill="none"
       />
       
       {/* Simple origin marker */}
@@ -52,8 +54,8 @@ const OriginAxes: React.FC<OriginAxesProps> = ({
         cx={0}
         cy={0}
         r={0.05/strokeWidth}
-        fill="#ffffff"
-        stroke="#000000"
+        fill="none"
+        stroke="#ffffff"
         strokeWidth={0.01/strokeWidth}
       />
     </>

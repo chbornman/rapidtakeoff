@@ -26,6 +26,7 @@ const GridLines: React.FC<GridLinesProps> = ({ scale, showGrid = true }) => {
             strokeWidth={0.02 / scale}
             strokeDasharray={`${0.1 / scale},${0.3 / scale}`}
             opacity={0.3}
+            fill="none"
           />
           {/* Horizontal grid lines (0.1 unit spacing) */}
           <line
@@ -37,6 +38,7 @@ const GridLines: React.FC<GridLinesProps> = ({ scale, showGrid = true }) => {
             strokeWidth={0.02 / scale}
             strokeDasharray={`${0.1 / scale},${0.3 / scale}`}
             opacity={0.3}
+            fill="none"
           />
         </React.Fragment>
       ))}
@@ -54,6 +56,7 @@ const GridLines: React.FC<GridLinesProps> = ({ scale, showGrid = true }) => {
             strokeWidth={0.05 / scale}
             strokeDasharray={`${0.2 / scale},${0.2 / scale}`}
             opacity={0.5}
+            fill="none"
           />
           {/* Horizontal major grid lines */}
           <line
@@ -65,6 +68,7 @@ const GridLines: React.FC<GridLinesProps> = ({ scale, showGrid = true }) => {
             strokeWidth={0.05 / scale}
             strokeDasharray={`${0.2 / scale},${0.2 / scale}`}
             opacity={0.5}
+            fill="none"
           />
         </React.Fragment>
       ))}

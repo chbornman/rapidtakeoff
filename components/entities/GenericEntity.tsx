@@ -48,7 +48,7 @@ const GenericEntity: React.FC<GenericEntityProps> = ({ entity, isSelected, onCli
     ? rendererConfig?.canvas?.colors?.selection || '#FF9900'
     : entityColor;
   const strokeWidth = isSelected ? 2 : 1;
-  // Single point: render small circle
+  // Single point: render small circle (wireframe style)
   if (coords.length === 1) {
     const [x, y] = coords[0];
     return (
@@ -56,7 +56,9 @@ const GenericEntity: React.FC<GenericEntityProps> = ({ entity, isSelected, onCli
         cx={x}
         cy={y}
         r={strokeWidth * 2}
-        fill={strokeColor}
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth={strokeWidth}
         onClick={onClick}
         data-entity-type={entity.type}
         data-entity-handle={(entity as any).handle}

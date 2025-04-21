@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Force wireframe rendering for all SVG elements but only in component renderer mode */
+body[data-rendering-mode="component"] #wireframe-canvas * {
+  fill: none !important;
+}
+
+body[data-rendering-mode="component"] #wireframe-canvas circle,
+body[data-rendering-mode="component"] #wireframe-canvas rect,
+body[data-rendering-mode="component"] #wireframe-canvas path,
+body[data-rendering-mode="component"] #wireframe-canvas polygon,
+body[data-rendering-mode="component"] #wireframe-canvas polyline,
+body[data-rendering-mode="component"] #wireframe-canvas ellipse {
+  fill: none !important;
+  fill-opacity: 0 !important;
+}

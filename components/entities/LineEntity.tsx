@@ -36,6 +36,7 @@ const LineEntity: React.FC<LineEntityProps> = ({ entity, isSelected, onClick, re
       y2={end[1]}
       stroke={strokeColor}
       strokeWidth={strokeWidth}
+      fill="none"
       onClick={onClick}
       data-entity-type="LINE"
       data-entity-handle={entity.handle}

@@ -2,13 +2,13 @@
   "config_version": "1.0.0",
   "canvas": {
     "zoom": {
-      "initial": 0.25,
+      "initial": 0.75,
       "min": 0.1,
       "max": 10,
       "inFactor": 1.1,
       "outFactor": 0.9
     },
-    "initialScaleFactor": 10,
+    "initialScaleFactor": 1.0,
     "showGrid": true,
     "xAxisColor": "#ff5555",
     "yAxisColor": "#55ff55",
@@ -33,12 +33,12 @@
     "entity": {
       "strokeWidth": {
         "default": 1,
-        "selected": 2,
+        "selected": 1,
         "hover": 1.5
       },
       "pointSize": {
         "default": 2,
-        "selected": 4
+        "selected": 2
       },
       "textSize": {
         "scaleFactor": 10
@@ -206,11 +206,11 @@
     },
     "hatch": {
       "outlineColor": "#ffffff",
-      "fillColor": "#888888",
-      "fillOpacity": 0.5,
+      "fillColor": "none",
+      "fillOpacity": 0,
       "parameters": {
         "pattern_name": "SOLID",
-        "solid_fill": true,
+        "solid_fill": false,
         "pattern_scale": 1,
         "pattern_angle": 0,
         "paths": 1,
@@ -269,7 +269,7 @@
     "show_defpoints": false,
     "proxy_graphic_policy": "SHOW",
     "line_policy": "ACCURATE",
-    "hatch_policy": "NORMAL",
+    "hatch_policy": "OUTLINE",
     "infinite_line_length": 20,
     "lineweight_scaling": 1,
     "min_lineweight": 300,
@@ -283,7 +283,10 @@
     "background_policy": "DEFAULT",
     "custom_bg_color": "#fff00f",
     "lineweight_policy": "ABSOLUTE",
-    "text_policy": "FILLING",
-    "image_policy": "DISPLAY"
+    "text_policy": "OUTLINE",
+    "image_policy": "DISPLAY",
+    "fill_policy": "NONE",
+    "lwpolyline_fill": false,
+    "polyline_fill": false
   }
 }

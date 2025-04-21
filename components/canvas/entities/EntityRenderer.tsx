@@ -60,8 +60,17 @@ const EntityRenderer: React.FC<EntityRendererProps> = ({
                 selection: '#ff9900',
                 hover: '#ffcc00',
                 background: '#2e2e2e'
+              },
+              entity: {
+                ...rendererConfig.canvas?.entity,
+                strokeWidth: {
+                  default: 1,
+                  selected: 1,
+                  hover: 1
+                }
               }
-            }
+            },
+            wireframe: true
           }}
         />
       ))}

@@ -82,6 +82,12 @@ export interface LayerVisibility {
 }
 
 /**
+ * Rendering mode options
+ */
+export type RenderingMode = 'component' | 'ezdxf';
+
+
+/**
  * Interface for DXF file data
  */
 export interface DXFData {

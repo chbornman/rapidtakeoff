@@ -79,20 +79,37 @@ const CanvasCore: React.FC<CanvasCoreProps> = ({
   const isFirstLoad = useRef(true);
   const prevDxfPathRef = useRef<string | null>(null);
   
-  // Handle file changes - reset first load flag when DXF file path changes
+  // Store previous renderer config to detect changes
+  const prevRendererConfigRef = useRef<any>(null);
+  
+  // Handle file changes or rendering mode changes
   useEffect(() => {
+    // Detect if this is a new file
     if (dxfData) {
       // Check if this is a new file by examining one of the entities for a unique identifier
       // This approach avoids directly comparing entity counts which could be affected by filtering
       const firstEntityHandle = Object.values(dxfData)[0]?.[0]?.handle;
       
+      // Check if we're changing rendering mode
+      const prevRenderingMode = prevRendererConfigRef.current?.renderingMode;
+      const currentRenderingMode = rendererConfig?.renderingMode;
+      const isRenderingModeChanged = prevRenderingMode !== currentRenderingMode && prevRenderingMode !== undefined;
+      
       if (firstEntityHandle && firstEntityHandle !== prevDxfPathRef.current) {
         console.log('[CANVAS] New DXF file detected - will reset view on next render');
         isFirstLoad.current = true;
         prevDxfPathRef.current = firstEntityHandle;
+      } else if (isRenderingModeChanged) {
+        console.log(`[CANVAS] Rendering mode changed from ${prevRenderingMode} to ${currentRenderingMode} - forcing reset`);
+        isFirstLoad.current = true;
       }
     }
-  }, [dxfData]);
+    
+    // Update renderer config reference
+    if (rendererConfig && rendererConfig !== prevRendererConfigRef.current) {
+      prevRendererConfigRef.current = rendererConfig;
+    }
+  }, [dxfData, rendererConfig]);
   
   // Debug visibility
   React.useEffect(() => {
@@ -129,10 +146,10 @@ const CanvasCore: React.FC<CanvasCoreProps> = ({
     let newScale;
     if (boxAspectRatio > svgAspectRatio) {
       // Width is the constraint
-      newScale = canvasSize.width / box.width * 0.2; // Start very zoomed out (20% of available space)
+      newScale = canvasSize.width / box.width * 0.8; // Start zoomed in to 80% of available space
     } else {
       // Height is the constraint
-      newScale = canvasSize.height / box.height * 0.2; // Start very zoomed out (20% of available space)
+      newScale = canvasSize.height / box.height * 0.8; // Start zoomed in to 80% of available space
     }
     
     // Apply initial scale factor from renderer config if available
@@ -164,6 +181,9 @@ const CanvasCore: React.FC<CanvasCoreProps> = ({
 
   // Mouse wheel zoom handler
   const handleMouseWheel = useCallback((event: React.WheelEvent<SVGSVGElement>) => {
+    // Prevent default browser zoom behavior
+    event.preventDefault();
+    
     // Use the wheel handler utility
     const result = handleWheel({
       event,
@@ -275,6 +295,7 @@ const CanvasCore: React.FC<CanvasCoreProps> = ({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMoveWithCoords}
         onMouseUp={handleMouseUp}
+        id="wireframe-canvas" // Add ID to target with CSS if needed
         onMouseLeave={() => {
           setIsDragging(false);
           setMousePosition({ x: 0, y: 0, svgX: 0, svgY: 0 });

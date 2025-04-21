@@ -27,8 +27,9 @@ const HatchEntity: React.FC<HatchEntityProps> = ({ entity, isSelected, onClick, 
   const selectionColor = rendererConfig?.canvas?.colors?.selection || '#FF0000';
   const strokeColor = isSelected ? selectionColor : defaultColor;
   const strokeWidth = isSelected ? selectedStrokeWidth : defaultStrokeWidth;
-  const fillColor = solid_fill ? (entityConfig.fillColor || '#888888') : 'none';
-  const fillOpacity = solid_fill ? (entityConfig.fillOpacity ?? 0.5) : 0;
+  // Always use none for fill to ensure wireframe appearance
+  const fillColor = 'none';
+  const fillOpacity = 0;
 
   return (
     <rect

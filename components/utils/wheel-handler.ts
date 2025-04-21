@@ -46,14 +46,18 @@ export const handleWheel = ({
   // Calculate offset to zoom toward mouse position
   const scaleDelta = newScale / currentScale;
   
-  // Mouse position in SVG coordinates
-  const svgMouseX = mouseX - currentOffset.x;
-  const svgMouseY = mouseY - currentOffset.y;
+  // Calculate center of viewport
+  const centerX = rect.width / 2;
+  const centerY = rect.height / 2;
   
-  // Calculate new offset
+  // Calculate mouse position relative to center (this is important for proper scaling behavior)
+  const mouseOffsetX = mouseX - centerX;
+  const mouseOffsetY = mouseY - centerY;
+  
+  // Calculate new offset that maintains the point under the cursor
   const newOffset = {
-    x: currentOffset.x - svgMouseX * (scaleDelta - 1),
-    y: currentOffset.y - svgMouseY * (scaleDelta - 1)
+    x: currentOffset.x - mouseOffsetX * (scaleDelta - 1),
+    y: currentOffset.y - mouseOffsetY * (scaleDelta - 1)
   };
   
   return { newScale, newOffset };
