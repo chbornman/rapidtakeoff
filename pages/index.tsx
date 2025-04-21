@@ -1,51 +1,19 @@
 import React, { useState, useEffect } from "react";
+import type { SVGRendererConfig } from "../components/types";
 import LeftSidebar from "../components/LeftSidebar";
 import RightSidebar from "../components/RightSidebar";
 import Modal from "../components/Modal";
 import Canvas from "../components/Canvas";
+import ResizablePanel from "../components/ResizablePanel";
 import {
   colors,
   typography,
   spacing,
   borderRadius,
   shadows,
+  sizes,
 } from "../styles/theme";
 
-// Define SVGRendererConfig interface for ezdxf
-interface SVGRendererConfig {
-  lineweight?: number;
-  text_size_factor?: number;
-  text_color?: string | null;
-  bg_color?: string | null;
-  stroke_color?: string | null;
-  show_paper_border?: boolean;
-  use_vector_effect?: boolean;
-  debug?: boolean;
-  quality?: "low" | "medium" | "high";
-  scale?: number;
-  pdsize?: number | null;
-  pdmode?: number | null;
-  measurement?: number | null;
-  show_defpoints?: boolean;
-  proxy_graphic_policy?: string;
-  line_policy?: string;
-  hatch_policy?: string;
-  infinite_line_length?: number;
-  lineweight_scaling?: number;
-  min_lineweight?: number | null;
-  min_dash_length?: number;
-  max_flattening_distance?: number;
-  circle_approximation_count?: number;
-  hatching_timeout?: number;
-  min_hatch_line_distance?: number;
-  color_policy?: string;
-  custom_fg_color?: string;
-  background_policy?: string;
-  custom_bg_color?: string;
-  lineweight_policy?: string;
-  text_policy?: string;
-  image_policy?: string;
-};
 
 // Extend Window interface with electron API
 declare global {
@@ -86,10 +54,15 @@ export default function Home() {
     loadConfig();
   }, []);
 
-  // handle loading SVG content (and store file path)
-  const handleSvgLoad = (svg: string, filePath: string) => {
-    setSvgData(svg);
+  // handle selecting a new DXF file: render to SVG and store
+  const handleFileSelect = async (filePath: string) => {
     setSvgFilePath(filePath);
+    try {
+      const svg = await window.electron.renderSVG(filePath, rendererConfig);
+      setSvgData(svg);
+    } catch (err) {
+      console.error("Failed to render SVG:", err);
+    }
   };
 
   // reload current SVG content from DXF file with current renderer config
@@ -124,11 +97,18 @@ export default function Home() {
   };
   return (
     <div className="flex h-screen overflow-hidden">
-      <LeftSidebar
-        onAccount={() => setShowAccount(true)}
-        onSvgLoad={handleSvgLoad}
-        rendererConfig={rendererConfig}
-      />
+      <ResizablePanel
+        defaultWidth={sizes.sidebar.width}
+        minWidth="180px"
+        maxWidth="400px"
+        position="left"
+      >
+        <LeftSidebar
+          onAccount={() => setShowAccount(true)}
+          onFileSelect={handleFileSelect}
+          filePath={svgFilePath}
+        />
+      </ResizablePanel>
       <div
         className="flex-1 flex items-center justify-center"
         style={{ backgroundColor: colors.surface.main }}
@@ -140,31 +120,22 @@ export default function Home() {
             <p className="mt-2 text-sm">Please ensure the renderer_config.json file exists and is valid.</p>
           </div>
         ) : svgData ? (
-          <>
-            <Canvas
-              data={svgData}
-              onReload={reloadSvg}
-              rendererConfig={rendererConfig}
-            />
-            <div className="absolute bottom-2 right-2 z-10">
-              <button
-                onClick={() =>
-                  updateRendererConfig({
-                    debug: !rendererConfig.debug,
-                  })
-                }
-                className="p-1 bg-white bg-opacity-75 rounded hover:bg-gray-200"
-                title="Toggle Debug Mode"
-              >
-                🐞
-              </button>
-            </div>
-          </>
+          <Canvas
+            data={svgData}
+            rendererConfig={rendererConfig}
+          />
         ) : (
           <div className="text-gray-500 text-xl">CAD Canvas Placeholder</div>
         )}
       </div>
-      <RightSidebar />
+      <ResizablePanel
+        defaultWidth={sizes.sidebar.width}
+        minWidth="180px"
+        maxWidth="400px"
+        position="right"
+      >
+        <RightSidebar />
+      </ResizablePanel>
 
       {showAccount && (
         <Modal onClose={() => setShowAccount(false)}>

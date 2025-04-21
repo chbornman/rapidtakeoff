@@ -14,7 +14,7 @@
     "hatch_policy": "NORMAL",
     "infinite_line_length": 20,
     "lineweight_scaling": 1.0,
-    "min_lineweight": null,
+    "min_lineweight": 150.0,
     "min_dash_length": 0.1,
     "max_flattening_distance": 0.1,
     "circle_approximation_count": 128,

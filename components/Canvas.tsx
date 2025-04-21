@@ -1,63 +1,20 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import {
-  colors,
-  shadows,
-  components as themeComponents,
-} from "../styles/theme";
-
-// Define SVGRendererConfig interface for ezdxf
-interface SVGRendererConfig {
-  lineweight?: number;
-  text_size_factor?: number;
-  text_color?: string | null;
-  bg_color?: string | null;
-  stroke_color?: string | null;
-  show_paper_border?: boolean;
-  use_vector_effect?: boolean;
-  debug?: boolean;
-  quality?: "low" | "medium" | "high";
-  scale?: number;
-  // DXF drawing add-on options (ezdxf Configuration)
-  pdsize?: number | null;                 // POINT entity size (None = header PDSIZE)
-  pdmode?: number | null;                 // POINT mode (None = header PDMODE)
-  measurement?: number | null;            // 0=imperial,1=metric (None = header MEASUREMENT)
-  show_defpoints?: boolean;               // show POINTs on defpoints layer
-  proxy_graphic_policy?: "IGNORE" | "SHOW" | "PREFER";
-  line_policy?: "SOLID" | "ACCURATE" | "APPROXIMATE";
-  hatch_policy?: "NORMAL" | "IGNORE" | "SHOW_OUTLINE" | "SHOW_SOLID" | "SHOW_APPROXIMATE_PATTERN";
-  infinite_line_length?: number;          // length for infinite LINES/XLINEs
-  lineweight_scaling?: number;            // multiplier for DXF lineweights
-  min_lineweight?: number | null;         // minimum lineweight in 1/300" (None = default)
-  min_dash_length?: number;               // minimum dash segment length
-  max_flattening_distance?: number;       // curve flattening tol. (drawing units)
-  circle_approximation_count?: number;    // segments to approximate full circle
-  hatching_timeout?: number;              // seconds before aborting hatch pattern
-  min_hatch_line_distance?: number;       // minimum hatch line spacing
-  color_policy?: "COLOR" | "COLOR_SWAP_BW" | "COLOR_NEGATIVE" | "MONOCHROME" | "MONOCHROME_DARK_BG" | "MONOCHROME_LIGHT_BG" | "BLACK" | "WHITE" | "CUSTOM";
-  custom_fg_color?: string;               // for COLOR_POLICY=CUSTOM
-  background_policy?: "DEFAULT" | "WHITE" | "BLACK" | "PAPERSPACE" | "MODELSPACE" | "OFF" | "CUSTOM";
-  custom_bg_color?: string;               // for BACKGROUND_POLICY=CUSTOM
-  lineweight_policy?: "ABSOLUTE" | "RELATIVE" | "RELATIVE_FIXED";
-  text_policy?: "FILLING" | "OUTLINE" | "REPLACE_RECT" | "REPLACE_FILL" | "IGNORE";
-  image_policy?: "DISPLAY" | "RECT" | "MISSING" | "PROXY" | "IGNORE";
-}
+import { colors, shadows, components as themeComponents } from "../styles/theme";
+import type { SVGRendererConfig } from "./types";
 
 /**
  * SVG Canvas to render ezdxf-generated SVG markup.
  * Props:
  *  - data: raw SVG string
- *  - onReload: optional callback to re-render
  *  - rendererConfig: optional configuration for the SVG renderer
  */
 interface CanvasProps {
   data: string;
-  onReload?: () => void;
   rendererConfig?: SVGRendererConfig;
 }
 
 export default function Canvas({
   data,
-  onReload,
   rendererConfig,
 }: CanvasProps) {
   // Only raw SVG markup is supported
@@ -290,18 +247,6 @@ export default function Canvas({
         }}
         dangerouslySetInnerHTML={{ __html: data }}
       />
-      {onReload && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onReload();
-          }}
-          className="absolute top-2 right-2 p-1 bg-white bg-opacity-75 rounded hover:bg-gray-200 z-10"
-          title="Reload File"
-        >
-          ↻
-        </button>
-      )}
     </div>
   );
 }
