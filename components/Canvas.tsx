@@ -9,6 +9,7 @@ import {
   SVGRendererConfig,
   DEFAULT_SVG_CONFIG
 } from "../renderer_constants";
+import { colors, shadows, components as themeComponents } from "../styles/theme";
 
 /**
  * SVG Canvas to render ezdxf-generated SVG markup.
@@ -151,9 +152,11 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
-      style={{ 
+      style={{
         cursor: isPanning ? "grabbing" : "grab",
-        backgroundColor: config.bg_color || "white"
+        // Use theme canvas styling
+        backgroundColor: config.bg_color || themeComponents.canvas.backgroundColor,
+        boxShadow: themeComponents.canvas.shadow,
       }}
     >
       {/* Zoom and pan controls */}
@@ -163,7 +166,13 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
             e.stopPropagation();
             setZoom((z) => Math.min(z * ZOOM_IN_FACTOR, MAX_ZOOM));
           }}
-          className="p-1 bg-white bg-opacity-75 rounded hover:bg-gray-200"
+          className="p-1 rounded"
+          style={{
+            // Use theme button primary styling
+            backgroundColor: themeComponents.button.primary.backgroundColor,
+            color: themeComponents.button.primary.textColor,
+            borderRadius: themeComponents.button.primary.borderRadius,
+          }}
           title="Zoom In"
         >
           +
@@ -173,7 +182,13 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
             e.stopPropagation();
             setZoom((z) => Math.max(z * ZOOM_OUT_FACTOR, MIN_ZOOM));
           }}
-          className="p-1 bg-white bg-opacity-75 rounded hover:bg-gray-200"
+          className="p-1 rounded"
+          style={{
+            // Use theme button primary styling
+            backgroundColor: themeComponents.button.primary.backgroundColor,
+            color: themeComponents.button.primary.textColor,
+            borderRadius: themeComponents.button.primary.borderRadius,
+          }}
           title="Zoom Out"
         >
           -
@@ -184,7 +199,13 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
             setZoom(INITIAL_ZOOM);
             setOffset({ x: 0, y: 0 });
           }}
-          className="p-1 bg-white bg-opacity-75 rounded hover:bg-gray-200"
+          className="p-1 rounded"
+          style={{
+            // Use theme button primary styling
+            backgroundColor: themeComponents.button.primary.backgroundColor,
+            color: themeComponents.button.primary.textColor,
+            borderRadius: themeComponents.button.primary.borderRadius,
+          }}
           title="Reset View"
         >
           &#8635;
@@ -194,7 +215,13 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
             e.stopPropagation();
             autoFitContent();
           }}
-          className="p-1 bg-white bg-opacity-75 rounded hover:bg-gray-200 ml-2"
+          className="p-1 rounded ml-2"
+          style={{
+            // Use theme button secondary styling
+            backgroundColor: themeComponents.button.secondary.backgroundColor,
+            color: themeComponents.button.secondary.textColor,
+            borderRadius: themeComponents.button.secondary.borderRadius,
+          }}
           title="Fit to View"
         >
           <span style={{ fontSize: '14px' }}>&#x1F50D;</span>

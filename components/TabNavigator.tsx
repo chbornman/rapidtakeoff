@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { colors } from '../styles/theme';
 
 /**
  * A reusable tab navigator component.
@@ -36,7 +37,7 @@ export default function TabNavigator({
             >
               <tab.icon className={`${iconClassName} ${tab.iconClassName || ''}`} aria-hidden="true" />
             </button>
-            {idx < tabs.length - 1 && <div className="w-px h-6 bg-gray-600" />}
+            {idx < tabs.length - 1 && <div className="w-px h-6" style={{ backgroundColor: colors.primary.dark }} />}
           </React.Fragment>
         ))}
       </div>

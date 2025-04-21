@@ -73,15 +73,8 @@ ipcMain.handle('render-svg', async (event, filePath, config = {}) => {
     const configStr = JSON.stringify(config);
     const args = [renderScript, filePath];
     
-    // Add config if provided
-    if (Object.keys(config).length > 0) {
-      // Debug log to see what config is being sent - using both console methods
-      console.log('Rendering with config:', configStr);
-      console.warn('CONFIG DEBUG:', JSON.stringify(config, null, 2));
-      
-      args.push('--config');
-      args.push(configStr);
-    }
+    // Don't pass config for now - using minimal renderer
+    console.log('Using minimal renderer without config')
     
     const proc = spawn(pythonCmd, args);
     proc.stdout.on('data', d => out += d.toString());

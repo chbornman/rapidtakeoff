@@ -6,17 +6,23 @@ import {
   InformationCircleIcon
 } from '@heroicons/react/24/outline';
 import TabNavigator from './TabNavigator';
+import { colors, components, typography, spacing, sizes } from '../styles/theme';
 
 export default function RightSidebar() {
   return (
-    <div className="w-64 bg-gray-100 flex flex-col border-l border-gray-300">
+    <div className="flex flex-col border-l" style={{ 
+      backgroundColor: colors.background.sidebar, 
+      color: colors.onPrimary,
+      borderColor: colors.primary.dark,
+      width: sizes.sidebar.width,
+    }}>
       <TabNavigator
         defaultActive="draw"
         iconClassName="h-5 w-5"
-        classNameTabBar="flex items-center justify-center p-2 space-x-4 border-b border-gray-300"
-        classNameActiveTab="text-gray-700"
-        classNameInactiveTab="text-gray-500 hover:text-gray-700"
-        classNameSeparator="border-b-2 border-gray-300"
+        classNameTabBar="flex items-center justify-center p-2 space-x-4 border-b"
+        classNameActiveTab="text-white font-bold"
+        classNameInactiveTab="text-white text-opacity-70 hover:text-opacity-100"
+        classNameSeparator="border-b-2 border-white"
         classNameContent="p-4 flex-1 overflow-y-auto"
         tabs={[
           {
@@ -25,14 +31,22 @@ export default function RightSidebar() {
             ariaLabel: 'Draw',
             content: (
               <div>
-                <h3 className="text-gray-700 font-bold mb-2">Draw Tools</h3>
-                <button className="flex items-center p-2 hover:bg-gray-200 rounded mb-1">
+                <h3 className="font-bold mb-2">Draw Tools</h3>
+                <button className="flex items-center p-2 hover:bg-opacity-20 rounded mb-1 w-full"
+                  style={{
+                    // Use theme sidebar item background
+                    backgroundColor: components.sidebar.itemBackground,
+                  }}>
                   <PencilIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-                  <span className="text-gray-700">Line</span>
+                  <span>Line</span>
                 </button>
-                <button className="flex items-center p-2 hover:bg-gray-200 rounded">
+                <button className="flex items-center p-2 hover:bg-opacity-20 rounded w-full"
+                  style={{
+                    // Use theme sidebar item background
+                    backgroundColor: components.sidebar.itemBackground,
+                  }}>
                   <PencilIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-                  <span className="text-gray-700">Circle</span>
+                  <span>Circle</span>
                 </button>
               </div>
             ),
@@ -43,14 +57,16 @@ export default function RightSidebar() {
             ariaLabel: 'Modify',
             content: (
               <div>
-                <h3 className="text-gray-700 font-bold mb-2">Modify Tools</h3>
-                <button className="flex items-center p-2 hover:bg-gray-200 rounded mb-1">
+                <h3 className="font-bold mb-2">Modify Tools</h3>
+                <button className="flex items-center p-2 hover:bg-opacity-20 rounded mb-1 w-full"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <AdjustmentsHorizontalIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-                  <span className="text-gray-700">Move</span>
+                  <span>Move</span>
                 </button>
-                <button className="flex items-center p-2 hover:bg-gray-200 rounded">
+                <button className="flex items-center p-2 hover:bg-opacity-20 rounded w-full"
+                      style={{ backgroundColor: 'rgba(255,255,255,0.1)' }}>
                   <AdjustmentsHorizontalIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-                  <span className="text-gray-700">Rotate</span>
+                  <span>Rotate</span>
                 </button>
               </div>
             ),
@@ -61,8 +77,8 @@ export default function RightSidebar() {
             ariaLabel: 'Settings',
             content: (
               <div>
-                <h3 className="text-gray-700 font-bold mb-2">Settings</h3>
-                <div className="text-gray-600">No settings available.</div>
+                <h3 className="font-bold mb-2">Settings</h3>
+                <div className="text-white text-opacity-80">No settings available.</div>
               </div>
             ),
           },

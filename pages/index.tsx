@@ -4,6 +4,7 @@ import RightSidebar from '../components/RightSidebar';
 import Modal from '../components/Modal';
 import Canvas from '../components/Canvas';
 import { SVGRendererConfig, DEFAULT_SVG_CONFIG } from '../renderer_constants';
+import { colors, typography, spacing, borderRadius, shadows } from '../styles/theme';
 
 export default function Home() {
   const [showAccount, setShowAccount] = useState(false);
@@ -55,7 +56,7 @@ export default function Home() {
         onSvgLoad={handleSvgLoad}
         rendererConfig={rendererConfig}
       />
-      <div className="flex-1 bg-pink-300 flex items-center justify-center">
+      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: colors.surface.main }}>
         {svgData ? (
           <>
             <Canvas 
@@ -87,10 +88,15 @@ export default function Home() {
       )}
       {showSettings && (
         <Modal onClose={() => setShowSettings(false)}>
-          <h2 className="text-2xl font-bold mb-4">SVG Renderer Settings</h2>
+          <h2 style={{
+            fontSize: typography.fontSize['2xl'],
+            fontWeight: typography.fontWeight.bold,
+            marginBottom: spacing[4],
+            color: colors.onBackground
+          }}>SVG Renderer Settings</h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Line Width</label>
+              <label className="block text-sm font-medium" style={{ color: colors.onBackground }}>Line Width</label>
               <input 
                 type="number" 
                 min="0.1" 
@@ -98,7 +104,13 @@ export default function Home() {
                 step="0.1"
                 value={rendererConfig.line_width} 
                 onChange={(e) => updateRendererConfig({ line_width: parseFloat(e.target.value) })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none"
+                style={{
+                  borderColor: colors.neutral.gray300,
+                  borderRadius: borderRadius.md,
+                  color: colors.onBackground,
+                  backgroundColor: colors.surface.main
+                }}
               />
             </div>
             
@@ -183,7 +195,33 @@ export default function Home() {
               </label>
             </div>
             
-            <div className="pt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Rendering Quality</label>
+              <select
+                value={rendererConfig.quality || 'high'}
+                onChange={(e) => updateRendererConfig({ quality: e.target.value as 'low' | 'medium' | 'high' })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                <option value="low">Low (Faster)</option>
+                <option value="medium">Medium</option>
+                <option value="high">High (Better quality)</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Scale Factor</label>
+              <input 
+                type="number" 
+                min="0.1" 
+                max="5" 
+                step="0.1"
+                value={rendererConfig.scale || 1.0} 
+                onChange={(e) => updateRendererConfig({ scale: parseFloat(e.target.value) })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
+            
+            <div style={{ paddingTop: spacing[4] }}>
               <button
                 onClick={() => {
                   setRendererConfig({ ...DEFAULT_SVG_CONFIG });
@@ -193,7 +231,17 @@ export default function Home() {
                       .catch(err => console.error('Failed to reset SVG rendering:', err));
                   }
                 }}
-                className="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                className="w-full inline-flex justify-center text-sm font-medium"
+                style={{
+                  backgroundColor: colors.primary.main,
+                  color: colors.onPrimary,
+                  padding: `${spacing[2]} ${spacing[4]}`,
+                  borderRadius: borderRadius.md,
+                  border: 'none',
+                  boxShadow: shadows.md,
+                  cursor: 'pointer',
+                  fontWeight: typography.fontWeight.medium,
+                }}
               >
                 Reset to Defaults
               </button>
