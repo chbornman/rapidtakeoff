@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { ViewfinderCircleIcon } from "@heroicons/react/24/outline";
 import { colors, shadows, components as themeComponents } from "../styles/theme";
 import { SelectedFeature, DXFData, LayerVisibility } from "./types";
 import DxfEntity from "./entities/DxfEntity";
@@ -23,6 +24,22 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  // Track pointer position (SVG coords) and container size for overlay display
+  const [pointerPos, setPointerPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
+  // Update container size on mount and window resize
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const { width, height } = containerRef.current.getBoundingClientRect();
+        setContainerSize({ width: Math.floor(width), height: Math.floor(height) });
+      }
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
   
   // Canvas configuration from props or default values
   const canvasConfig = {
@@ -48,6 +65,19 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const offsetStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  // Center axes helper
+  const centerAxes = useCallback(() => {
+    if (!containerRef.current) {
+      return;
+    }
+    const rect = containerRef.current.getBoundingClientRect();
+    const newZoom = canvasConfig.INITIAL_ZOOM;
+    // Position world origin (0,0) at center: (offset*zoom + 0*zoom = screenCenter)
+    const newOffsetX = rect.width / (2 * newZoom);
+    const newOffsetY = rect.height / (2 * newZoom);
+    setZoom(newZoom);
+    setOffset({ x: newOffsetX, y: newOffsetY });
+  }, [canvasConfig.INITIAL_ZOOM]);
   
   // State to store the entity bounding box
   const [boundingBox, setBoundingBox] = useState({
@@ -807,12 +837,11 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
       }
       
       // Store the calculated bounds in a format that's easy to use for rendering
-      // This will be used for drawing the bounding box, regardless of canvas resizing
       originalBoundsRef.current = {
         minX,
         minY,
-        width: boundWidth, // Use the possibly adjusted boundWidth
-        height: boundHeight // Use the possibly adjusted boundHeight
+        width: boundWidth,
+        height: boundHeight
       };
       
       // Log entity type statistics for debugging
@@ -1098,6 +1127,15 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    // Update pointer position in SVG coordinate space
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const relX = e.clientX - rect.left;
+      const relY = e.clientY - rect.top;
+      const svgX = (relX - offset.x) / zoom;
+      const svgY = (relY - offset.y) / zoom;
+      setPointerPos({ x: +svgX.toFixed(2), y: +svgY.toFixed(2) });
+    }
     if (!isPanning) return;
     e.preventDefault();
     const dx = e.clientX - panStart.current.x;
@@ -1132,14 +1170,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
     }
   };
 
-  // If no data, show placeholder
-  if (!dxfData) {
-    return (
-      <div className="flex items-center justify-center w-full h-full text-gray-500 text-xl">
-        No DXF file loaded
-      </div>
-    );
-  }
+  // No early exit—always render canvas (axes draw even without data)
 
   return (
     <div
@@ -1156,6 +1187,11 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
         boxShadow: themeComponents.canvas.shadow
       }}
     >
+      {/* Overlay: canvas size and pointer position */}
+      <div className="absolute top-2 right-2 z-10 bg-black bg-opacity-50 text-white text-xs p-1 rounded">
+        <div>Canvas: {containerSize.width}px × {containerSize.height}px</div>
+        <div>Pointer: {pointerPos.x}, {pointerPos.y}</div>
+      </div>
       {/* Zoom and pan controls */}
       <div className="absolute top-2 left-2 z-10 flex space-x-2">
         <button
@@ -1287,12 +1323,8 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setInitialFitDone(false); // Reset to trigger full recalculation
-            
-            // Recalculate bounds then zoom to fit
+            setInitialFitDone(false);
             autoFitContent();
-            
-            // Add a delay to let the viewBox and bounds update before centering
             setTimeout(() => {
               if (containerRef.current && svgRef.current && originalBoundsRef.current) {
                 const rect = containerRef.current.getBoundingClientRect();
@@ -1349,6 +1381,19 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
         >
           <span style={{ fontSize: "14px" }}>&#x1F50D;</span>
         </button>
+        {/* Center axes button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); centerAxes(); }}
+          className="p-1 rounded ml-2"
+          style={{
+            backgroundColor: themeComponents.button.secondary.backgroundColor,
+            color: themeComponents.button.secondary.textColor,
+            borderRadius: themeComponents.button.secondary.borderRadius,
+          }}
+          title="Center Axes"
+        >
+          <ViewfinderCircleIcon className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Main SVG canvas with transformations */}
@@ -1363,6 +1408,38 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
         viewBox="-25 -25 50 50"
         preserveAspectRatio={rendererConfig.canvas?.rendering?.preserveAspectRatio !== false ? 'xMidYMid meet' : 'none'}
       >
+      {/* Origin & Axes layer */}
+      {layerVisibility['Origin & Axes'] && (
+        <g pointerEvents="none">
+          {(() => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            const halfWidth = rect ? rect.width / (2 * zoom) : originalBoundsRef.current.width / 2;
+            const halfHeight = rect ? rect.height / (2 * zoom) : originalBoundsRef.current.height / 2;
+            return (
+              <>
+                {/* X-axis */}
+                <line
+                  x1={-halfWidth}
+                  y1={0}
+                  x2={halfWidth}
+                  y2={0}
+                  stroke={rendererConfig.canvas?.colors?.xAxis || "red"}
+                  strokeWidth="1"
+                />
+                {/* Y-axis */}
+                <line
+                  x1={0}
+                  y1={-halfHeight}
+                  x2={0}
+                  y2={halfHeight}
+                  stroke={rendererConfig.canvas?.colors?.yAxis || "blue"}
+                  strokeWidth="1"
+                />
+              </>
+            );
+          })()}
+        </g>
+      )}
         {/* Bounding box to show the extents of all entities */}
         {dxfData && Object.keys(dxfData).length > 0 && (
           <>
@@ -1384,7 +1461,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX + 10} 
                 y2={originalBoundsRef.current.minY} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
               <line 
                 x1={originalBoundsRef.current.minX} 
@@ -1392,7 +1469,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX} 
                 y2={originalBoundsRef.current.minY + 10} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
               
               {/* Top-right */}
@@ -1402,7 +1479,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX + originalBoundsRef.current.width - 10} 
                 y2={originalBoundsRef.current.minY} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
               <line 
                 x1={originalBoundsRef.current.minX + originalBoundsRef.current.width} 
@@ -1410,7 +1487,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX + originalBoundsRef.current.width} 
                 y2={originalBoundsRef.current.minY + 10} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
               
               {/* Bottom-left */}
@@ -1420,7 +1497,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX + 10} 
                 y2={originalBoundsRef.current.minY + originalBoundsRef.current.height} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
               <line 
                 x1={originalBoundsRef.current.minX} 
@@ -1428,7 +1505,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX} 
                 y2={originalBoundsRef.current.minY + originalBoundsRef.current.height - 10} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
               
               {/* Bottom-right */}
@@ -1438,7 +1515,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX + originalBoundsRef.current.width - 10} 
                 y2={originalBoundsRef.current.minY + originalBoundsRef.current.height} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
               <line 
                 x1={originalBoundsRef.current.minX + originalBoundsRef.current.width} 
@@ -1446,7 +1523,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
                 x2={originalBoundsRef.current.minX + originalBoundsRef.current.width} 
                 y2={originalBoundsRef.current.minY + originalBoundsRef.current.height - 10} 
                 stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"} 
-                strokeWidth="3" 
+                strokeWidth="1.5" 
               />
             </g>
             
@@ -1457,7 +1534,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
               width={originalBoundsRef.current.width}
               height={originalBoundsRef.current.height}
               stroke={rendererConfig.canvas?.colors?.boundingBox || "#00FF00"}
-              strokeWidth="2"
+              strokeWidth="1"
               strokeDasharray="5,5"
               fill="none"
               pointerEvents="none"
@@ -1466,7 +1543,7 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
         )}
         
         {/* Render each layer based on visibility */}
-        {Object.entries(dxfData).map(([layerName, entities]) => {
+        {dxfData && Object.entries(dxfData).map(([layerName, entities]) => {
           // Skip hidden layers
           if (layerVisibility && layerVisibility[layerName] === false) {
             return null;

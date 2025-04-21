@@ -26,6 +26,31 @@ export interface SVGRendererConfig {
   lineweight_policy?: "ABSOLUTE" | "RELATIVE" | "RELATIVE_FIXED";
   text_policy?: "FILLING" | "OUTLINE" | "REPLACE_RECT" | "REPLACE_FILL" | "IGNORE";
   image_policy?: "DISPLAY" | "RECT" | "MISSING" | "PROXY" | "IGNORE";
+  canvas?: {
+    zoom?: {
+      initial?: number;
+      min?: number;
+      max?: number;
+      inFactor?: number;
+      outFactor?: number;
+    };
+    colors?: {
+      background?: string;
+      selection?: string;
+      hover?: string;
+      default?: string;
+      boundingBox?: string;
+    };
+    rendering?: {
+      boundsPadding?: number;
+      boundsScalingFactor?: number;
+      preserveAspectRatio?: boolean;
+      thresholdForExtremeCoordinates?: number;
+      minimumEntitySize?: number;
+      minTextBoxSize?: number;
+      textPadding?: number;
+    };
+  };
 }
 
 /**
@@ -155,4 +180,30 @@ export interface HatchEntity extends Entity {
   pattern_scale: number;
   pattern_angle: number;
   paths: number;
+}
+
+/**
+ * Mouse wheel handling options
+ */
+export interface WheelHandlerOptions {
+  zoomInFactor: number;
+  zoomOutFactor: number;
+  minZoom: number;
+  maxZoom: number;
+  defaultDirection?: 'in' | 'out';
+  // Threshold for zoom out detection (higher means harder to trigger)
+  zoomOutThreshold?: number;
+  // Threshold for zoom in detection (lower means easier to trigger)
+  zoomInThreshold?: number;
+  // Enable logging for debugging
+  debug?: boolean;
+}
+
+/**
+ * Result from wheel handler
+ */
+export interface WheelResult {
+  zoomChange: number;
+  wheelDirection: number; // -1 for in, 1 for out, 0 for no change
+  newZoom: number;
 }

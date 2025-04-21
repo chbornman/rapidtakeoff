@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import type { SelectedFeature, DXFData, LayerVisibility } from "../components/types";
 import LeftSidebar from "../components/LeftSidebar";
 import RightSidebar from "../components/RightSidebar";
@@ -31,7 +31,8 @@ export default function Home() {
   const [showAccount, setShowAccount] = useState(false);
   const [dxfFilePath, setDxfFilePath] = useState<string | null>(null);
   const [dxfData, setDxfData] = useState<DXFData | null>(null);
-  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({});
+  // Track visibility of layers, including special Origin & Axes layer
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ 'Origin & Axes': true });
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [rendererConfig, setRendererConfig] = useState<any>({});
@@ -70,11 +71,11 @@ export default function Home() {
       const data = JSON.parse(result) as DXFData;
       setDxfData(data);
       
-      // Initialize layer visibility (all layers visible by default)
-      const initialVisibility = Object.keys(data).reduce<LayerVisibility>((acc, layerName) => {
-        acc[layerName] = true;
-        return acc;
-      }, {});
+      // Initialize layer visibility (all layers + Origin & Axes visible by default)
+      const initialVisibility: LayerVisibility = { 'Origin & Axes': true };
+      Object.keys(data).forEach(layerName => {
+        initialVisibility[layerName] = true;
+      });
       setLayerVisibility(initialVisibility);
       
       // Reset selected feature
@@ -86,9 +87,9 @@ export default function Home() {
   };
 
   // Handle layer visibility changes
-  const handleLayerVisibilityChange = (visibility: LayerVisibility) => {
+  const handleLayerVisibilityChange = useCallback((visibility: LayerVisibility) => {
     setLayerVisibility(visibility);
-  };
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden">

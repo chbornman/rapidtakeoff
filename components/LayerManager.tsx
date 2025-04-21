@@ -16,42 +16,25 @@ const LayerManager: React.FC<LayerManagerProps> = ({
   dxfData, 
   onLayerVisibilityChange 
 }) => {
+  const SPECIAL_LAYER = 'Origin & Axes';
   const [expanded, setExpanded] = useState(true);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({});
   const [layers, setLayers] = useState<string[]>([]);
-  const isInitializedRef = useRef(false);
   
-  // Update layers list when dxfData changes
+  // Build layers list including special Origin & Axes layer on DXF data change
   useEffect(() => {
-    // Skip if no data
-    if (!dxfData) {
-      setLayers([]);
-      return;
-    }
-    
-    // Extract layer names
-    const layerNames = Object.keys(dxfData);
-    setLayers(layerNames);
-    
-    // Initialize all layers to visible
-    if (!isInitializedRef.current) {
-      const initialVisibility: LayerVisibility = {};
-      layerNames.forEach(name => {
-        initialVisibility[name] = true;
-      });
-      
-      // Set local state first
-      setLayerVisibility(initialVisibility);
-      
-      // Then notify parent - but only once
-      setTimeout(() => {
-        onLayerVisibilityChange(initialVisibility);
-        isInitializedRef.current = true;
-      }, 0);
-    }
-  // Intentionally omit dependencies to prevent re-initialization
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dxfData]);
+    const baseLayers = dxfData ? Object.keys(dxfData) : [];
+    const newLayers = [SPECIAL_LAYER, ...baseLayers];
+    setLayers(newLayers);
+    // Initialize or reset visibility for each layer
+    const initialVisibility: LayerVisibility = {};
+    newLayers.forEach(name => {
+      initialVisibility[name] = true;
+    });
+    setLayerVisibility(initialVisibility);
+    onLayerVisibilityChange(initialVisibility);
+  // Only when dxfData changes
+  }, [dxfData, onLayerVisibilityChange]);
   
   // Memoize toggle functions to prevent unnecessary rerenders
   const toggleLayerVisibility = useCallback((layerName: string) => {
@@ -61,10 +44,8 @@ const LayerManager: React.FC<LayerManagerProps> = ({
         [layerName]: !prev[layerName]
       };
       
-      // Only notify parent if we're initialized
-      if (isInitializedRef.current) {
-        onLayerVisibilityChange(updated);
-      }
+      // Notify parent immediately
+      onLayerVisibilityChange(updated);
       
       return updated;
     });
@@ -77,10 +58,8 @@ const LayerManager: React.FC<LayerManagerProps> = ({
         updated[layer] = visible;
       });
       
-      // Only notify parent if we're initialized
-      if (isInitializedRef.current) {
-        onLayerVisibilityChange(updated);
-      }
+      // Notify parent immediately
+      onLayerVisibilityChange(updated);
       
       return updated;
     });
@@ -91,14 +70,8 @@ const LayerManager: React.FC<LayerManagerProps> = ({
     return dxfData && dxfData[layerName] ? dxfData[layerName].length : 0;
   }, [dxfData]);
   
-  // Show placeholder if no data
-  if (!dxfData || layers.length === 0) {
-    return (
-      <div className="p-2 text-gray-400 text-xs">
-        No layers available
-      </div>
-    );
-  }
+  // Always render layer list, including the Origin & Axes layer
+  // (layers array always has at least SPECIAL_LAYER)
 
   return (
     <div className="flex flex-col overflow-auto text-sm">
