@@ -112,16 +112,22 @@ export default function Canvas({
     try {
       // Determine SVG dimensions (use viewBox if available, otherwise bounding box)
       let svgWidth: number, svgHeight: number;
+      let minX: number = 0, minY: number = 0;
       const viewBoxAttr = svgEl.getAttribute("viewBox");
       if (viewBoxAttr) {
-        const [, , wbWidth, wbHeight] = viewBoxAttr.split(" ").map(Number);
-        svgWidth = wbWidth;
-        svgHeight = wbHeight;
+        const [vbX, vbY, vbWidth, vbHeight] = viewBoxAttr.split(" ").map(Number);
+        minX = vbX;
+        minY = vbY;
+        svgWidth = vbWidth;
+        svgHeight = vbHeight;
       } else {
         const bbox = svgEl.getBBox();
+        minX = bbox.x;
+        minY = bbox.y;
         svgWidth = bbox.width;
         svgHeight = bbox.height;
       }
+      
       // Get container dimensions
       const container = containerRef.current;
       if (!container || svgWidth === 0 || svgHeight === 0) return;
@@ -133,11 +139,24 @@ export default function Canvas({
       const heightRatio = containerHeight / svgHeight;
       const fitZoom = Math.min(widthRatio, heightRatio) * 0.9; // 90% to add some margin
 
-      // Set appropriate zoom and center the content
+      // Calculate the center of the viewBox in SVG coordinate space
+      const boxCenterX = minX + svgWidth / 2;
+      const boxCenterY = minY + svgHeight / 2;
+      
+      // Set appropriate zoom
       setZoom(fitZoom);
+      
+      // Calculate offset to center the viewBox center in the container
       setOffset({
-        x: (containerWidth - svgWidth * fitZoom) / 2,
-        y: (containerHeight - svgHeight * fitZoom) / 2,
+        x: containerWidth / 2 - boxCenterX * fitZoom,
+        y: containerHeight / 2 - boxCenterY * fitZoom,
+      });
+      
+      console.log("Auto fit content:", {
+        viewBox: { minX, minY, width: svgWidth, height: svgHeight },
+        center: { x: boxCenterX, y: boxCenterY },
+        containerSize: { width: containerWidth, height: containerHeight },
+        zoom: fitZoom
       });
     } catch (e) {
       console.error("Error auto-fitting content:", e);
@@ -360,21 +379,7 @@ export default function Canvas({
     }
   }, [selectedFeature, data]);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = -e.deltaY;
-    const factor = delta > 0 ? canvasConfig.ZOOM_IN_FACTOR : canvasConfig.ZOOM_OUT_FACTOR;
-    const newZoom = Math.min(Math.max(zoom * factor, canvasConfig.MIN_ZOOM), canvasConfig.MAX_ZOOM);
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (rect) {
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const dx = (mx / zoom) * (newZoom - zoom);
-      const dy = (my / zoom) * (newZoom - zoom);
-      setOffset({ x: offset.x - dx, y: offset.y - dy });
-    }
-    setZoom(newZoom);
-  };
+  // Removed handleWheel as we're now using the addEventListener approach
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -517,11 +522,50 @@ export default function Canvas({
     }
   };
 
+  // Use useEffect to add wheel event listener with { passive: false } option
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const wheelHandler = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = -e.deltaY;
+      const factor = delta > 0 ? canvasConfig.ZOOM_IN_FACTOR : canvasConfig.ZOOM_OUT_FACTOR;
+      const newZoom = Math.min(Math.max(zoom * factor, canvasConfig.MIN_ZOOM), canvasConfig.MAX_ZOOM);
+      const rect = container.getBoundingClientRect();
+      if (rect) {
+        // Calculate cursor position relative to the container
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        
+        // Calculate the SVG coordinates under the cursor before zooming
+        // This creates a more natural zoom (centered on cursor)
+        const svgPoint = {
+          x: (mx - offset.x) / zoom,
+          y: (my - offset.y) / zoom
+        };
+        
+        // Calculate new offset to keep the cursor over the same SVG point
+        const newOffsetX = mx - svgPoint.x * newZoom;
+        const newOffsetY = my - svgPoint.y * newZoom;
+        
+        // Update offset for position after zoom
+        setOffset({ x: newOffsetX, y: newOffsetY });
+      }
+      setZoom(newZoom);
+    };
+    
+    container.addEventListener('wheel', wheelHandler, { passive: false });
+    
+    return () => {
+      container.removeEventListener('wheel', wheelHandler);
+    };
+  }, [zoom, offset, canvasConfig]);
+
   return (
     <div
       ref={containerRef}
       className="relative w-full h-full overflow-hidden"
-      onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -570,8 +614,57 @@ export default function Canvas({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setZoom(canvasConfig.INITIAL_ZOOM);
-            setOffset({ x: 0, y: 0 });
+            
+            // Instead of resetting to origin, center the SVG in the container
+            const svgEl = svgWrapperRef.current?.querySelector("svg");
+            const container = containerRef.current;
+            
+            if (svgEl && container) {
+              // Get container dimensions
+              const { width: containerWidth, height: containerHeight } = 
+                container.getBoundingClientRect();
+              
+              // Determine SVG dimensions
+              let svgWidth: number, svgHeight: number;
+              let minX: number = 0, minY: number = 0;
+              const viewBoxAttr = svgEl.getAttribute("viewBox");
+              if (viewBoxAttr) {
+                const [vbX, vbY, vbWidth, vbHeight] = viewBoxAttr.split(" ").map(Number);
+                minX = vbX;
+                minY = vbY;
+                svgWidth = vbWidth;
+                svgHeight = vbHeight;
+              } else {
+                const bbox = svgEl.getBBox();
+                minX = bbox.x;
+                minY = bbox.y;
+                svgWidth = bbox.width;
+                svgHeight = bbox.height;
+              }
+              
+              // Calculate the center of the viewBox in SVG coordinate space
+              const boxCenterX = minX + svgWidth / 2;
+              const boxCenterY = minY + svgHeight / 2;
+              
+              // Set initial zoom
+              setZoom(canvasConfig.INITIAL_ZOOM);
+              
+              // Calculate offset to center the viewBox center in the container
+              setOffset({
+                x: containerWidth / 2 - boxCenterX * canvasConfig.INITIAL_ZOOM,
+                y: containerHeight / 2 - boxCenterY * canvasConfig.INITIAL_ZOOM,
+              });
+              
+              console.log("Reset view:", { 
+                viewBox: { minX, minY, svgWidth, svgHeight }, 
+                center: { x: boxCenterX, y: boxCenterY },
+                zoom: canvasConfig.INITIAL_ZOOM
+              });
+            } else {
+              // Fallback to original behavior if we can't get dimensions
+              setZoom(canvasConfig.INITIAL_ZOOM);
+              setOffset({ x: 0, y: 0 });
+            }
           }}
           className="p-1 rounded"
           style={{

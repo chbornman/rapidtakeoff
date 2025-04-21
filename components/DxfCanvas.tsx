@@ -92,14 +92,18 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
       const fitZoom = Math.min(widthRatio, heightRatio);
       
       // Apply scaling factor but don't make it too large
-      const scalingFactor = rendererConfig.canvas?.rendering?.boundsScalingFactor || 1.0;
+      // Extract these values to avoid dependency changes
+      const scalingFactor = rendererConfig?.canvas?.rendering?.boundsScalingFactor || 1.0;
+      const minZoom = canvasConfig?.MIN_ZOOM || 0.1;
+      const maxZoom = canvasConfig?.MAX_ZOOM || 10;
+      
       // Cap the scaling factor at 1.5 for the initial centering to avoid excessive zoom
       const cappedScalingFactor = Math.min(scalingFactor, 1.5);
       
       // Ensure zoom isn't too small or too large
       const newZoom = Math.min(
-        Math.max(fitZoom * cappedScalingFactor, canvasConfig.MIN_ZOOM), 
-        canvasConfig.MAX_ZOOM
+        Math.max(fitZoom * cappedScalingFactor, minZoom), 
+        maxZoom
       );
       
       // Calculate offset to center the bounding box
@@ -123,7 +127,9 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
     } catch (e) {
       console.error("Error centering content:", e);
     }
-  }, [rendererConfig.canvas?.rendering?.boundsScalingFactor, canvasConfig]);
+  // Using empty dependency array to ensure stability - values are read from refs directly
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   
   // Auto-center and fit the SVG content
   const autoFitContent = useCallback(() => {
@@ -935,7 +941,8 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
     }
   }, [dxfData, initialFitDone, autoFitContent]);
   
-  // Additional effect to update SVG viewBox when originalBoundsRef changes
+  // Additional effect to update SVG viewBox when boundingBox state changes
+  // We use the boundingBox state as a dependency instead of the ref to prevent infinite loops
   useEffect(() => {
     if (svgRef.current && originalBoundsRef.current) {
       const bounds = originalBoundsRef.current;
@@ -949,18 +956,33 @@ const DxfCanvas: React.FC<DxfCanvasProps> = ({
       
       console.log("Updated SVG viewBox to match bounds:", bounds);
     }
-  }, [originalBoundsRef.current?.width, originalBoundsRef.current?.height]);
+  // Using boundingBox state instead of ref.current directly to avoid infinite loops
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boundingBox]);
   
   // Additional effect to ensure content is centered after component mounts
+  // We only want this to run once per dxfData change, not on every render
+  const hasRunInitialCenterRef = useRef(false);
+  
   useEffect(() => {
-    if (dxfData && svgRef.current && containerRef.current) {
+    if (dxfData && svgRef.current && containerRef.current && !hasRunInitialCenterRef.current) {
       // Wait for the component to be fully rendered
       const timer = setTimeout(() => {
         centerContent();
+        hasRunInitialCenterRef.current = true;
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [dxfData, centerContent]);
+    
+    // Reset the flag when dxfData changes
+    return () => {
+      if (dxfData) {
+        hasRunInitialCenterRef.current = false;
+      }
+    };
+  // Intentionally not including centerContent in dependencies to prevent excessive reruns
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dxfData]);
   
   // Add resize observer to handle container resizing and maintain aspect ratio
   useEffect(() => {

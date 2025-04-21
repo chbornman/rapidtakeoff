@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   EyeIcon, 
   EyeSlashIcon, 
@@ -18,56 +18,81 @@ const LayerManager: React.FC<LayerManagerProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(true);
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({});
-  const [allLayers, setAllLayers] = useState<string[]>([]);
-
-  // Initialize layer visibility when dxfData changes
+  const [layers, setLayers] = useState<string[]>([]);
+  const isInitializedRef = useRef(false);
+  
+  // Update layers list when dxfData changes
   useEffect(() => {
+    // Skip if no data
     if (!dxfData) {
-      setLayerVisibility({});
-      setAllLayers([]);
+      setLayers([]);
       return;
     }
-
-    const layers = Object.keys(dxfData);
-    setAllLayers(layers);
-
-    // Initialize all layers as visible
-    const initialVisibility = layers.reduce<LayerVisibility>((acc, layer) => {
-      acc[layer] = true;
-      return acc;
-    }, {});
-
-    setLayerVisibility(initialVisibility);
-    // Notify parent component of initial visibility
-    onLayerVisibilityChange(initialVisibility);
-  }, [dxfData, onLayerVisibilityChange]);
-
-  // Toggle a single layer's visibility
-  const toggleLayerVisibility = (layerName: string) => {
-    const newVisibility = {
-      ...layerVisibility,
-      [layerName]: !layerVisibility[layerName]
-    };
-    setLayerVisibility(newVisibility);
-    onLayerVisibilityChange(newVisibility);
-  };
-
-  // Toggle all layers' visibility
-  const toggleAllLayers = (visible: boolean) => {
-    const newVisibility = allLayers.reduce<LayerVisibility>((acc, layer) => {
-      acc[layer] = visible;
-      return acc;
-    }, {});
-    setLayerVisibility(newVisibility);
-    onLayerVisibilityChange(newVisibility);
-  };
-
+    
+    // Extract layer names
+    const layerNames = Object.keys(dxfData);
+    setLayers(layerNames);
+    
+    // Initialize all layers to visible
+    if (!isInitializedRef.current) {
+      const initialVisibility: LayerVisibility = {};
+      layerNames.forEach(name => {
+        initialVisibility[name] = true;
+      });
+      
+      // Set local state first
+      setLayerVisibility(initialVisibility);
+      
+      // Then notify parent - but only once
+      setTimeout(() => {
+        onLayerVisibilityChange(initialVisibility);
+        isInitializedRef.current = true;
+      }, 0);
+    }
+  // Intentionally omit dependencies to prevent re-initialization
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dxfData]);
+  
+  // Memoize toggle functions to prevent unnecessary rerenders
+  const toggleLayerVisibility = useCallback((layerName: string) => {
+    setLayerVisibility(prev => {
+      const updated = {
+        ...prev,
+        [layerName]: !prev[layerName]
+      };
+      
+      // Only notify parent if we're initialized
+      if (isInitializedRef.current) {
+        onLayerVisibilityChange(updated);
+      }
+      
+      return updated;
+    });
+  }, [onLayerVisibilityChange]);
+  
+  const toggleAllLayers = useCallback((visible: boolean) => {
+    setLayerVisibility(prev => {
+      const updated = {...prev};
+      layers.forEach(layer => {
+        updated[layer] = visible;
+      });
+      
+      // Only notify parent if we're initialized
+      if (isInitializedRef.current) {
+        onLayerVisibilityChange(updated);
+      }
+      
+      return updated;
+    });
+  }, [layers, onLayerVisibilityChange]);
+  
   // Count entities in a layer
-  const countEntities = (layerName: string): number => {
+  const countEntities = useCallback((layerName: string): number => {
     return dxfData && dxfData[layerName] ? dxfData[layerName].length : 0;
-  };
-
-  if (!dxfData || allLayers.length === 0) {
+  }, [dxfData]);
+  
+  // Show placeholder if no data
+  if (!dxfData || layers.length === 0) {
     return (
       <div className="p-2 text-gray-400 text-xs">
         No layers available
@@ -111,7 +136,7 @@ const LayerManager: React.FC<LayerManagerProps> = ({
 
       {expanded && (
         <div className="p-1 space-y-1">
-          {allLayers.map(layerName => (
+          {layers.map(layerName => (
             <div 
               key={layerName} 
               className="flex items-center justify-between p-1 rounded hover:bg-gray-700"
@@ -143,4 +168,4 @@ const LayerManager: React.FC<LayerManagerProps> = ({
   );
 };
 
-export default LayerManager;
+export default React.memo(LayerManager);

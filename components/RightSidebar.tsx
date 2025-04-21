@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   InformationCircleIcon,
   ChevronLeftIcon,
@@ -26,6 +26,11 @@ export default function RightSidebar({
   onLayerVisibilityChange 
 }: RightSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  
+  // Memoize the layer visibility callback to prevent unnecessary re-renders
+  const handleLayerVisibilityChange = useCallback((visibility: LayerVisibility) => {
+    onLayerVisibilityChange(visibility);
+  }, [onLayerVisibilityChange]);
   
   return (
     <div
@@ -70,7 +75,7 @@ export default function RightSidebar({
                   <h3 className="font-bold mb-2">Layer Controls</h3>
                   <LayerManager 
                     dxfData={dxfData} 
-                    onLayerVisibilityChange={onLayerVisibilityChange} 
+                    onLayerVisibilityChange={handleLayerVisibilityChange} 
                   />
                 </div>
               ),
