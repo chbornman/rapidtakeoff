@@ -4,4 +4,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electron', {
   openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   renderSVG: (filePath, config) => ipcRenderer.invoke('render-svg', filePath, config),
+  parseDXFTree: (filePath: string) => ipcRenderer.invoke('parse-dxf-tree', filePath),
+  getRendererConfig: () => ipcRenderer.invoke('get-renderer-config'),
 });

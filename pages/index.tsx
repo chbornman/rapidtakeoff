@@ -1,12 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import LeftSidebar from "../components/LeftSidebar";
 import RightSidebar from "../components/RightSidebar";
 import Modal from "../components/Modal";
 import Canvas from "../components/Canvas";
-import {
-  SVGRendererConfig,
-  DEFAULT_SVG_CONFIG,
-} from "../constants/renderer_constants";
 import {
   colors,
   typography,
@@ -15,14 +11,80 @@ import {
   shadows,
 } from "../styles/theme";
 
+// Define SVGRendererConfig interface for ezdxf
+interface SVGRendererConfig {
+  lineweight?: number;
+  text_size_factor?: number;
+  text_color?: string | null;
+  bg_color?: string | null;
+  stroke_color?: string | null;
+  show_paper_border?: boolean;
+  use_vector_effect?: boolean;
+  debug?: boolean;
+  quality?: "low" | "medium" | "high";
+  scale?: number;
+  pdsize?: number | null;
+  pdmode?: number | null;
+  measurement?: number | null;
+  show_defpoints?: boolean;
+  proxy_graphic_policy?: string;
+  line_policy?: string;
+  hatch_policy?: string;
+  infinite_line_length?: number;
+  lineweight_scaling?: number;
+  min_lineweight?: number | null;
+  min_dash_length?: number;
+  max_flattening_distance?: number;
+  circle_approximation_count?: number;
+  hatching_timeout?: number;
+  min_hatch_line_distance?: number;
+  color_policy?: string;
+  custom_fg_color?: string;
+  background_policy?: string;
+  custom_bg_color?: string;
+  lineweight_policy?: string;
+  text_policy?: string;
+  image_policy?: string;
+};
+
+// Extend Window interface with electron API
+declare global {
+  interface Window {
+    electron: {
+      openFileDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
+      renderSVG: (filePath: string, config: SVGRendererConfig) => Promise<string>;
+      parseDXFTree: (filePath: string) => Promise<string>;
+      getRendererConfig: () => Promise<any>;
+    };
+  }
+}
+
 export default function Home() {
   const [showAccount, setShowAccount] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [svgData, setSvgData] = useState<string | null>(null);
   const [svgFilePath, setSvgFilePath] = useState<string | null>(null);
-  const [rendererConfig, setRendererConfig] = useState<SVGRendererConfig>({
-    ...DEFAULT_SVG_CONFIG,
-  });
+  const [rendererConfig, setRendererConfig] = useState<SVGRendererConfig>({});
+  
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  // Load config from JSON file without defaults
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await window.electron.getRendererConfig();
+        if (config && config.DEFAULT_SVG_CONFIG) {
+          setRendererConfig(config.DEFAULT_SVG_CONFIG);
+          setConfigError(null);
+        } else {
+          setConfigError("Invalid configuration format");
+        }
+      } catch (error) {
+        console.error('Error loading renderer config:', error);
+        setConfigError(`Configuration error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    loadConfig();
+  }, []);
 
   // handle loading SVG content (and store file path)
   const handleSvgLoad = (svg: string, filePath: string) => {
@@ -64,7 +126,6 @@ export default function Home() {
     <div className="flex h-screen overflow-hidden">
       <LeftSidebar
         onAccount={() => setShowAccount(true)}
-        onSettings={() => setShowSettings(true)}
         onSvgLoad={handleSvgLoad}
         rendererConfig={rendererConfig}
       />
@@ -72,7 +133,13 @@ export default function Home() {
         className="flex-1 flex items-center justify-center"
         style={{ backgroundColor: colors.surface.main }}
       >
-        {svgData ? (
+        {configError ? (
+          <div className="text-red-500 p-4 bg-red-50 border border-red-200 rounded-md">
+            <h3 className="font-bold mb-2">Configuration Error</h3>
+            <p>{configError}</p>
+            <p className="mt-2 text-sm">Please ensure the renderer_config.json file exists and is valid.</p>
+          </div>
+        ) : svgData ? (
           <>
             <Canvas
               data={svgData}
@@ -83,7 +150,7 @@ export default function Home() {
               <button
                 onClick={() =>
                   updateRendererConfig({
-                    debug_render: !rendererConfig.debug_render,
+                    debug: !rendererConfig.debug,
                   })
                 }
                 className="p-1 bg-white bg-opacity-75 rounded hover:bg-gray-200"
@@ -103,220 +170,6 @@ export default function Home() {
         <Modal onClose={() => setShowAccount(false)}>
           <h2 className="text-2xl font-bold mb-4">Account</h2>
           <p className="text-gray-700">User account details go here.</p>
-        </Modal>
-      )}
-      {showSettings && (
-        <Modal onClose={() => setShowSettings(false)}>
-          <h2
-            style={{
-              fontSize: typography.fontSize["2xl"],
-              fontWeight: typography.fontWeight.bold,
-              marginBottom: spacing[4],
-              color: colors.onBackground,
-            }}
-          >
-            SVG Renderer Settings
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label
-                className="block text-sm font-medium"
-                style={{ color: colors.onBackground }}
-              >
-                Line Width
-              </label>
-              <input
-                type="number"
-                min="0.1"
-                max="5"
-                step="0.1"
-                value={rendererConfig.line_width}
-                onChange={(e) =>
-                  updateRendererConfig({
-                    line_width: parseFloat(e.target.value),
-                  })
-                }
-                className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none"
-                style={{
-                  borderColor: colors.neutral.gray300,
-                  borderRadius: borderRadius.md,
-                  color: colors.onBackground,
-                  backgroundColor: colors.surface.main,
-                }}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Text Size Factor
-              </label>
-              <input
-                type="number"
-                min="0.1"
-                max="5"
-                step="0.1"
-                value={rendererConfig.text_size_factor}
-                onChange={(e) =>
-                  updateRendererConfig({
-                    text_size_factor: parseFloat(e.target.value),
-                  })
-                }
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Line Color
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., #0000FF or null for default"
-                value={rendererConfig.line_color || ""}
-                onChange={(e) => {
-                  const value =
-                    e.target.value.trim() === "" ? null : e.target.value;
-                  updateRendererConfig({ line_color: value });
-                }}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Text Color
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., #FF0000 or null for default"
-                value={rendererConfig.text_color || ""}
-                onChange={(e) => {
-                  const value =
-                    e.target.value.trim() === "" ? null : e.target.value;
-                  updateRendererConfig({ text_color: value });
-                }}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Background Color
-              </label>
-              <input
-                type="text"
-                placeholder="e.g., #FFFFFF or null for transparent"
-                value={rendererConfig.bg_color || ""}
-                onChange={(e) => {
-                  const value =
-                    e.target.value.trim() === "" ? null : e.target.value;
-                  updateRendererConfig({ bg_color: value });
-                }}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="show_paper_border"
-                checked={rendererConfig.show_paper_border || false}
-                onChange={(e) =>
-                  updateRendererConfig({ show_paper_border: e.target.checked })
-                }
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              />
-              <label
-                htmlFor="show_paper_border"
-                className="ml-2 block text-sm text-gray-700"
-              >
-                Show Paper Border
-              </label>
-            </div>
-
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                id="vector_effect"
-                checked={rendererConfig.vector_effect !== false}
-                onChange={(e) =>
-                  updateRendererConfig({ vector_effect: e.target.checked })
-                }
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-              />
-              <label
-                htmlFor="vector_effect"
-                className="ml-2 block text-sm text-gray-700"
-              >
-                Use non-scaling stroke (may affect visibility)
-              </label>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Rendering Quality
-              </label>
-              <select
-                value={rendererConfig.quality || "high"}
-                onChange={(e) =>
-                  updateRendererConfig({
-                    quality: e.target.value as "low" | "medium" | "high",
-                  })
-                }
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              >
-                <option value="low">Low (Faster)</option>
-                <option value="medium">Medium</option>
-                <option value="high">High (Better quality)</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Scale Factor
-              </label>
-              <input
-                type="number"
-                min="0.1"
-                max="5"
-                step="0.1"
-                value={rendererConfig.scale || 1.0}
-                onChange={(e) =>
-                  updateRendererConfig({ scale: parseFloat(e.target.value) })
-                }
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-
-            <div style={{ paddingTop: spacing[4] }}>
-              <button
-                onClick={() => {
-                  setRendererConfig({ ...DEFAULT_SVG_CONFIG });
-                  if (svgFilePath) {
-                    window.electron
-                      .renderSVG(svgFilePath, DEFAULT_SVG_CONFIG)
-                      .then((svg) => setSvgData(svg))
-                      .catch((err) =>
-                        console.error("Failed to reset SVG rendering:", err),
-                      );
-                  }
-                }}
-                className="w-full inline-flex justify-center text-sm font-medium"
-                style={{
-                  backgroundColor: colors.primary.main,
-                  color: colors.onPrimary,
-                  padding: `${spacing[2]} ${spacing[4]}`,
-                  borderRadius: borderRadius.md,
-                  border: "none",
-                  boxShadow: shadows.md,
-                  cursor: "pointer",
-                  fontWeight: typography.fontWeight.medium,
-                }}
-              >
-                Reset to Defaults
-              </button>
-            </div>
-          </div>
         </Modal>
       )}
     </div>

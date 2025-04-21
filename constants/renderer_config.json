@@ -1,0 +1,31 @@
+{
+  "INITIAL_ZOOM": 1,
+  "MIN_ZOOM": 0.1,
+  "MAX_ZOOM": 10,
+  "ZOOM_IN_FACTOR": 1.1,
+  "ZOOM_OUT_FACTOR": 0.9,
+  "DEFAULT_SVG_CONFIG": {
+    "pdsize": null,
+    "pdmode": null,
+    "measurement": null,
+    "show_defpoints": false,
+    "proxy_graphic_policy": "SHOW",
+    "line_policy": "ACCURATE",
+    "hatch_policy": "NORMAL",
+    "infinite_line_length": 20,
+    "lineweight_scaling": 1.0,
+    "min_lineweight": null,
+    "min_dash_length": 0.1,
+    "max_flattening_distance": 0.1,
+    "circle_approximation_count": 128,
+    "hatching_timeout": 30.0,
+    "min_hatch_line_distance": 0.0001,
+    "color_policy": "COLOR",
+    "custom_fg_color": "#000000",
+    "background_policy": "DEFAULT",
+    "custom_bg_color": "#ffffff",
+    "lineweight_policy": "ABSOLUTE",
+    "text_policy": "FILLING",
+    "image_policy": "DISPLAY"
+  }
+}

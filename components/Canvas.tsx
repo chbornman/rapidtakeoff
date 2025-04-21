@@ -1,15 +1,46 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
-  INITIAL_ZOOM,
-  MIN_ZOOM,
-  MAX_ZOOM,
-  ZOOM_IN_FACTOR,
-  ZOOM_OUT_FACTOR,
-  SVG_STYLE_CSS,
-  SVGRendererConfig,
-  DEFAULT_SVG_CONFIG
-} from "../renderer_constants";
-import { colors, shadows, components as themeComponents } from "../styles/theme";
+  colors,
+  shadows,
+  components as themeComponents,
+} from "../styles/theme";
+
+// Define SVGRendererConfig interface for ezdxf
+interface SVGRendererConfig {
+  lineweight?: number;
+  text_size_factor?: number;
+  text_color?: string | null;
+  bg_color?: string | null;
+  stroke_color?: string | null;
+  show_paper_border?: boolean;
+  use_vector_effect?: boolean;
+  debug?: boolean;
+  quality?: "low" | "medium" | "high";
+  scale?: number;
+  // DXF drawing add-on options (ezdxf Configuration)
+  pdsize?: number | null;                 // POINT entity size (None = header PDSIZE)
+  pdmode?: number | null;                 // POINT mode (None = header PDMODE)
+  measurement?: number | null;            // 0=imperial,1=metric (None = header MEASUREMENT)
+  show_defpoints?: boolean;               // show POINTs on defpoints layer
+  proxy_graphic_policy?: "IGNORE" | "SHOW" | "PREFER";
+  line_policy?: "SOLID" | "ACCURATE" | "APPROXIMATE";
+  hatch_policy?: "NORMAL" | "IGNORE" | "SHOW_OUTLINE" | "SHOW_SOLID" | "SHOW_APPROXIMATE_PATTERN";
+  infinite_line_length?: number;          // length for infinite LINES/XLINEs
+  lineweight_scaling?: number;            // multiplier for DXF lineweights
+  min_lineweight?: number | null;         // minimum lineweight in 1/300" (None = default)
+  min_dash_length?: number;               // minimum dash segment length
+  max_flattening_distance?: number;       // curve flattening tol. (drawing units)
+  circle_approximation_count?: number;    // segments to approximate full circle
+  hatching_timeout?: number;              // seconds before aborting hatch pattern
+  min_hatch_line_distance?: number;       // minimum hatch line spacing
+  color_policy?: "COLOR" | "COLOR_SWAP_BW" | "COLOR_NEGATIVE" | "MONOCHROME" | "MONOCHROME_DARK_BG" | "MONOCHROME_LIGHT_BG" | "BLACK" | "WHITE" | "CUSTOM";
+  custom_fg_color?: string;               // for COLOR_POLICY=CUSTOM
+  background_policy?: "DEFAULT" | "WHITE" | "BLACK" | "PAPERSPACE" | "MODELSPACE" | "OFF" | "CUSTOM";
+  custom_bg_color?: string;               // for BACKGROUND_POLICY=CUSTOM
+  lineweight_policy?: "ABSOLUTE" | "RELATIVE" | "RELATIVE_FIXED";
+  text_policy?: "FILLING" | "OUTLINE" | "REPLACE_RECT" | "REPLACE_FILL" | "IGNORE";
+  image_policy?: "DISPLAY" | "RECT" | "MISSING" | "PROXY" | "IGNORE";
+}
 
 /**
  * SVG Canvas to render ezdxf-generated SVG markup.
@@ -24,17 +55,54 @@ interface CanvasProps {
   rendererConfig?: SVGRendererConfig;
 }
 
-export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) {
+export default function Canvas({
+  data,
+  onReload,
+  rendererConfig,
+}: CanvasProps) {
   // Only raw SVG markup is supported
   if (!data || typeof data !== "string") {
     return null;
   }
+
+  // Canvas zoom/pan configuration values
+  const [canvasConfig, setCanvasConfig] = useState({
+    INITIAL_ZOOM: 1,
+    MIN_ZOOM: 0.1,
+    MAX_ZOOM: 10,
+    ZOOM_IN_FACTOR: 1.1,
+    ZOOM_OUT_FACTOR: 0.9
+  });
   
-  // Merge provided config with defaults
-  const config = { ...DEFAULT_SVG_CONFIG, ...rendererConfig };
+  // Load canvas configuration values from renderer config JSON
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        // @ts-ignore - electron is declared in the global scope via preload
+        const config = await window.electron.getRendererConfig();
+        if (config) {
+          // Only update canvas-specific config values
+          setCanvasConfig({
+            INITIAL_ZOOM: config.INITIAL_ZOOM || 1,
+            MIN_ZOOM: config.MIN_ZOOM || 0.1,
+            MAX_ZOOM: config.MAX_ZOOM || 10,
+            ZOOM_IN_FACTOR: config.ZOOM_IN_FACTOR || 1.1,
+            ZOOM_OUT_FACTOR: config.ZOOM_OUT_FACTOR || 0.9
+          });
+        }
+      } catch (error) {
+        console.error('Error loading canvas config:', error);
+        // We don't need to handle errors here as it's handled in the parent component
+      }
+    };
+    loadConfig();
+  }, []);
+  
+  // Use only provided config without defaults
+  const config = rendererConfig || {};
   const containerRef = useRef<HTMLDivElement>(null);
   const svgWrapperRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(INITIAL_ZOOM);
+  const [zoom, setZoom] = useState(canvasConfig.INITIAL_ZOOM);
   const [offset, setOffset] = useState<{ x: number; y: number }>({
     x: 0,
     y: 0,
@@ -47,72 +115,58 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
   const autoFitContent = useCallback(() => {
     const svgEl = svgWrapperRef.current?.querySelector("svg");
     if (!svgEl) return;
-    
+
     try {
-      // Get SVG dimensions
-      const viewBox = svgEl.getAttribute("viewBox");
-      if (viewBox) {
-        const [, , svgWidth, svgHeight] = viewBox.split(" ").map(Number);
-        
-        // Get container dimensions
-        const container = containerRef.current;
-        if (!container) return;
-        const { width: containerWidth, height: containerHeight } = container.getBoundingClientRect();
-        
-        // Calculate appropriate zoom level to fit
-        const widthRatio = containerWidth / svgWidth;
-        const heightRatio = containerHeight / svgHeight;
-        const fitZoom = Math.min(widthRatio, heightRatio) * 0.9; // 90% to add some margin
-        
-        // Set appropriate zoom and center the content
-        setZoom(fitZoom);
-        setOffset({
-          x: (containerWidth - svgWidth * fitZoom) / 2,
-          y: (containerHeight - svgHeight * fitZoom) / 2
-        });
+      // Determine SVG dimensions (use viewBox if available, otherwise bounding box)
+      let svgWidth: number, svgHeight: number;
+      const viewBoxAttr = svgEl.getAttribute("viewBox");
+      if (viewBoxAttr) {
+        const [, , wbWidth, wbHeight] = viewBoxAttr.split(" ").map(Number);
+        svgWidth = wbWidth;
+        svgHeight = wbHeight;
+      } else {
+        const bbox = svgEl.getBBox();
+        svgWidth = bbox.width;
+        svgHeight = bbox.height;
       }
+      // Get container dimensions
+      const container = containerRef.current;
+      if (!container || svgWidth === 0 || svgHeight === 0) return;
+      const { width: containerWidth, height: containerHeight } =
+        container.getBoundingClientRect();
+
+      // Calculate appropriate zoom level to fit
+      const widthRatio = containerWidth / svgWidth;
+      const heightRatio = containerHeight / svgHeight;
+      const fitZoom = Math.min(widthRatio, heightRatio) * 0.9; // 90% to add some margin
+
+      // Set appropriate zoom and center the content
+      setZoom(fitZoom);
+      setOffset({
+        x: (containerWidth - svgWidth * fitZoom) / 2,
+        y: (containerHeight - svgHeight * fitZoom) / 2,
+      });
     } catch (e) {
       console.error("Error auto-fitting content:", e);
     }
   }, []);
 
-  // Ensure SVG scales to container and apply styling
+  // Just ensure SVG scales to container
   useEffect(() => {
     const svgEl = svgWrapperRef.current?.querySelector("svg");
     if (svgEl) {
-      // fit SVG to container and override stroke styles for thinner non-scaling lines
+      // Make SVG responsive within container
       svgEl.setAttribute("width", "100%");
       svgEl.setAttribute("height", "100%");
       svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
-      
-      // Only add our style if there's no vector-effect style already
-      if (!svgEl.querySelector("style")) {
-        // prepend style block to apply customized SVG styles (e.g., stroke width)
-        const styleTag = document.createElementNS("http://www.w3.org/2000/svg", "style");
-        styleTag.textContent = SVG_STYLE_CSS;
-        svgEl.prepend(styleTag);
-      }
-      
-      // Ensure all paths have vector-effect attribute
-      if (config.vector_effect) {
-        const elements = svgEl.querySelectorAll("path, line, polyline, circle, ellipse, rect, polygon");
-        elements.forEach(el => {
-          el.setAttribute("vector-effect", "non-scaling-stroke");
-          // Use the configured line width from config
-          el.setAttribute("stroke-width", String(config.line_width));
-        });
-      }
-      
-      // Auto-fit content on first load
-      autoFitContent();
     }
-  }, [data, config.vector_effect, autoFitContent]);
+  }, [data]);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = -e.deltaY;
-    const factor = delta > 0 ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
-    const newZoom = Math.min(Math.max(zoom * factor, MIN_ZOOM), MAX_ZOOM);
+    const factor = delta > 0 ? canvasConfig.ZOOM_IN_FACTOR : canvasConfig.ZOOM_OUT_FACTOR;
+    const newZoom = Math.min(Math.max(zoom * factor, canvasConfig.MIN_ZOOM), canvasConfig.MAX_ZOOM);
     const rect = containerRef.current?.getBoundingClientRect();
     if (rect) {
       const mx = e.clientX - rect.left;
@@ -154,9 +208,8 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
       onMouseLeave={handleMouseUp}
       style={{
         cursor: isPanning ? "grabbing" : "grab",
-        // Use theme canvas styling
-        backgroundColor: config.bg_color || themeComponents.canvas.backgroundColor,
-        boxShadow: themeComponents.canvas.shadow,
+        backgroundColor: themeComponents.canvas.backgroundColor,
+        boxShadow: themeComponents.canvas.shadow
       }}
     >
       {/* Zoom and pan controls */}
@@ -164,7 +217,7 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setZoom((z) => Math.min(z * ZOOM_IN_FACTOR, MAX_ZOOM));
+            setZoom((z) => Math.min(z * canvasConfig.ZOOM_IN_FACTOR, canvasConfig.MAX_ZOOM));
           }}
           className="p-1 rounded"
           style={{
@@ -180,7 +233,7 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setZoom((z) => Math.max(z * ZOOM_OUT_FACTOR, MIN_ZOOM));
+            setZoom((z) => Math.max(z * canvasConfig.ZOOM_OUT_FACTOR, canvasConfig.MIN_ZOOM));
           }}
           className="p-1 rounded"
           style={{
@@ -196,7 +249,7 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setZoom(INITIAL_ZOOM);
+            setZoom(canvasConfig.INITIAL_ZOOM);
             setOffset({ x: 0, y: 0 });
           }}
           className="p-1 rounded"
@@ -224,7 +277,7 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
           }}
           title="Fit to View"
         >
-          <span style={{ fontSize: '14px' }}>&#x1F50D;</span>
+          <span style={{ fontSize: "14px" }}>&#x1F50D;</span>
         </button>
       </div>
       <div
@@ -234,7 +287,6 @@ export default function Canvas({ data, onReload, rendererConfig }: CanvasProps) 
           transformOrigin: "0 0",
           width: "100%",
           height: "100%",
-          backgroundColor: config.bg_color || "transparent"
         }}
         dangerouslySetInnerHTML={{ __html: data }}
       />
