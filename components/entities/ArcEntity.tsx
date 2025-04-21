@@ -5,9 +5,11 @@ interface ArcEntityProps {
   entity: ArcEntityType;
   isSelected: boolean;
   onClick: () => void;
+  /** Optional renderer configuration for styling */
+  rendererConfig?: any;
 }
 
-const ArcEntity: React.FC<ArcEntityProps> = ({ entity, isSelected, onClick }) => {
+const ArcEntity: React.FC<ArcEntityProps> = ({ entity, isSelected, onClick, rendererConfig }) => {
   const { center, radius, start_angle, end_angle } = entity;
   
   // Convert degrees to radians
@@ -29,17 +31,29 @@ const ArcEntity: React.FC<ArcEntityProps> = ({ entity, isSelected, onClick }) =>
   // Construct SVG path for arc
   const pathData = `M ${startX} ${startY} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${endX} ${endY}`;
   
+  // Determine styling from rendererConfig
+  const typeKey = entity.type.toLowerCase();
+  const entitiesConfig = rendererConfig?.entities || {};
+  const entityConfig = entitiesConfig[typeKey] || {};
+  const canvasEntityCfg = rendererConfig?.canvas?.entity;
+  const defaultStrokeWidth = canvasEntityCfg?.strokeWidth?.default ?? 1;
+  const selectedStrokeWidth = canvasEntityCfg?.strokeWidth?.selected ?? defaultStrokeWidth + 1;
+  const defaultColor = entityConfig.color || rendererConfig?.canvas?.colors?.default || '#FFFFFF';
+  const selectionColor = rendererConfig?.canvas?.colors?.selection || '#FF0000';
+  const strokeColor = isSelected ? selectionColor : defaultColor;
+  const strokeWidth = isSelected ? selectedStrokeWidth : defaultStrokeWidth;
+
   return (
     <path
       d={pathData}
-      stroke={isSelected ? '#FF0000' : '#FFFFFF'}
-      strokeWidth={isSelected ? 3 : 2}
-      fill="none"
+      stroke={strokeColor}
+      strokeWidth={strokeWidth}
+      fill={strokeColor}
       onClick={onClick}
       data-entity-type="ARC"
       data-entity-handle={entity.handle}
       data-layer={entity.layer}
-      className="hover:stroke-blue-400 cursor-pointer transition-colors duration-150"
+      className="cursor-pointer transition-colors duration-150"
     />
   );
 };

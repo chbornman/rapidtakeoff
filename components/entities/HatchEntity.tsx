@@ -5,30 +5,46 @@ interface HatchEntityProps {
   entity: HatchEntityType;
   isSelected: boolean;
   onClick: () => void;
+  /** Optional renderer configuration for styling */
+  rendererConfig?: any;
 }
 
-const HatchEntity: React.FC<HatchEntityProps> = ({ entity, isSelected, onClick }) => {
+const HatchEntity: React.FC<HatchEntityProps> = ({ entity, isSelected, onClick, rendererConfig }) => {
   // Hatch entities are complex - in a real implementation, we'd need to parse the boundary paths
   // For this example, we'll just show a placeholder rectangle
   
   // Check if we have a solid fill
   const { solid_fill } = entity;
   
+  // Determine styling from rendererConfig
+  const typeKey = entity.type.toLowerCase();
+  const entitiesConfig = rendererConfig?.entities || {};
+  const entityConfig = entitiesConfig[typeKey] || {};
+  const canvasEntityCfg = rendererConfig?.canvas?.entity;
+  const defaultStrokeWidth = canvasEntityCfg?.strokeWidth?.default ?? 1;
+  const selectedStrokeWidth = canvasEntityCfg?.strokeWidth?.selected ?? defaultStrokeWidth + 1;
+  const defaultColor = entityConfig.outlineColor || entityConfig.color || rendererConfig?.canvas?.colors?.default || '#FFFFFF';
+  const selectionColor = rendererConfig?.canvas?.colors?.selection || '#FF0000';
+  const strokeColor = isSelected ? selectionColor : defaultColor;
+  const strokeWidth = isSelected ? selectedStrokeWidth : defaultStrokeWidth;
+  const fillColor = solid_fill ? (entityConfig.fillColor || '#888888') : 'none';
+  const fillOpacity = solid_fill ? (entityConfig.fillOpacity ?? 0.5) : 0;
+
   return (
     <rect
       x="0"
       y="0"
       width="10"
       height="10"
-      stroke={isSelected ? '#FF0000' : '#FFFFFF'}
-      strokeWidth={isSelected ? 2 : 1}
-      fill={solid_fill ? (isSelected ? '#FF4444' : '#888888') : 'none'}
-      fillOpacity={solid_fill ? 0.5 : 0}
+      stroke={strokeColor}
+      strokeWidth={strokeWidth}
+      fill={fillColor}
+      fillOpacity={fillOpacity}
       onClick={onClick}
       data-entity-type="HATCH"
       data-entity-handle={entity.handle}
       data-layer={entity.layer}
-      className="hover:stroke-blue-400 cursor-pointer transition-colors duration-150"
+      className="cursor-pointer transition-colors duration-150"
     />
   );
 };

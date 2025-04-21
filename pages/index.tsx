@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import type { SelectedFeature, DXFData, LayerVisibility } from "../components/types";
 import LeftSidebar from "../components/LeftSidebar";
-import RightSidebar from "../components/RightSidebar";
+// import RightSidebar from "../components/RightSidebar"; // Removed right sidebar
 import Modal from "../components/Modal";
-import DxfCanvas from "../components/DxfCanvas";
+import Canvas from "../components/Canvas";
 import ResizablePanel from "../components/ResizablePanel";
 import DebugPanel from "../components/DebugPanel";
 import {
@@ -21,7 +21,7 @@ declare global {
   interface Window {
     electron: {
       openFileDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
-      parseDXFTree: (filePath: string) => Promise<string>;
+      parseDXFTree: (filePath: string, config?: any) => Promise<string>;
       getRendererConfig: () => Promise<any>;
     };
   }
@@ -33,6 +33,8 @@ export default function Home() {
   const [dxfData, setDxfData] = useState<DXFData | null>(null);
   // Track visibility of layers, including special Origin & Axes layer
   const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ 'Origin & Axes': true });
+  // Track visibility of individual components per layer
+  const [componentVisibility, setComponentVisibility] = useState<Record<string, Record<string, boolean>>>({});
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [rendererConfig, setRendererConfig] = useState<any>({});
@@ -66,8 +68,20 @@ export default function Home() {
     setDxfFilePath(filePath);
     
     try {
-      // Parse DXF tree data
-      const result = await window.electron.parseDXFTree(filePath);
+      // Make sure we have the renderer config first
+      let config = rendererConfig;
+      if (!config) {
+        try {
+          config = await window.electron.getRendererConfig();
+          setRendererConfig(config);
+        } catch (configErr) {
+          console.warn("Could not load renderer config:", configErr);
+          config = {}; // Use empty config if we can't load it
+        }
+      }
+      
+      // Parse DXF tree data with renderer config
+      const result = await window.electron.parseDXFTree(filePath, config);
       const data = JSON.parse(result) as DXFData;
       setDxfData(data);
       
@@ -78,17 +92,46 @@ export default function Home() {
       });
       setLayerVisibility(initialVisibility);
       
+      // Initialize component visibility using entity handles as unique IDs
+      const initialCompVis: Record<string, Record<string, boolean>> = {};
+      Object.entries(data).forEach(([layerName, entities]) => {
+        initialCompVis[layerName] = {};
+        entities.forEach((entity) => {
+          // Use entity.handle as the unique identifier if available
+          const id = entity.handle || `${layerName}:${entity.type}:${Math.random().toString(36).substr(2, 9)}`;
+          initialCompVis[layerName][id] = true;
+        });
+      });
+      setComponentVisibility(initialCompVis);
+      
       // Reset selected feature
       setSelectedFeature(null);
+      
+      console.log(`Loaded DXF with ${Object.keys(data).length} layers and ${
+        Object.values(data).reduce((count, entities) => count + entities.length, 0)
+      } entities`);
     } catch (err) {
       console.error("Failed to parse DXF:", err);
       setDxfData(null);
     }
   };
 
+  // Handle file close (reset everything)
+  const handleFileClose = useCallback(() => {
+    setDxfFilePath(null);
+    setDxfData(null);
+    setLayerVisibility({ 'Origin & Axes': true });
+    setComponentVisibility({});
+    setSelectedFeature(null);
+  }, []);
+  
   // Handle layer visibility changes
   const handleLayerVisibilityChange = useCallback((visibility: LayerVisibility) => {
     setLayerVisibility(visibility);
+  }, []);
+  // Handle component visibility changes
+  const handleComponentVisibilityChange = useCallback((visibility: Record<string, Record<string, boolean>>) => {
+    setComponentVisibility(visibility);
   }, []);
 
   return (
@@ -104,6 +147,9 @@ export default function Home() {
           onFileSelect={handleFileSelect}
           filePath={dxfFilePath}
           onFeatureSelect={setSelectedFeature}
+          onLayerVisibilityChange={handleLayerVisibilityChange}
+          onComponentVisibilityChange={handleComponentVisibilityChange}
+          onFileClose={handleFileClose}
         />
       </ResizablePanel>
       <div
@@ -117,26 +163,24 @@ export default function Home() {
             <p className="mt-2 text-sm">Please ensure the component_renderer_config.json file exists and is valid.</p>
           </div>
         ) : (
-          <DxfCanvas
+          <Canvas
             dxfData={dxfData}
             layerVisibility={layerVisibility}
+            componentVisibility={componentVisibility}
             selectedFeature={selectedFeature}
             onFeatureSelect={setSelectedFeature}
-            rendererConfig={rendererConfig}
+            rendererConfig={{
+              ...rendererConfig,
+              initialScaleFactor: 10, // Increase scale factor for better visibility
+              showGrid: true,         // Show coordinate grid
+              xAxisColor: '#ff5555',  // Bright red X axis
+              yAxisColor: '#55ff55',  // Bright green Y axis
+              backgroundColor: '#222222' // Darker background for better contrast
+            }}
           />
         )}
       </div>
-      <ResizablePanel
-        defaultWidth={sizes.sidebar.width}
-        minWidth="180px"
-        maxWidth="400px"
-        position="right"
-      >
-        <RightSidebar 
-          dxfData={dxfData}
-          onLayerVisibilityChange={handleLayerVisibilityChange}
-        />
-      </ResizablePanel>
+      {/* Right sidebar removed; layer controls integrated into component tree */}
 
       {/* Debug Panel for console logs */}
       <DebugPanel maxLogs={50} />

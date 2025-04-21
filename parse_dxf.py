@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """
-Extract components (lines, arcs, text) from a DXF file grouped by layer,
-and output a JSON structure to stdout.
+Enhanced DXF parser that extracts entities from a DXF file grouped by layer,
+and outputs a JSON structure to stdout. Uses ezdxf for optimal DXF support.
 """
 import sys
 import json
 import array
+import argparse
 import numpy as np
+from typing import Dict, List, Any, Union, Optional
 
 try:
     import ezdxf
-    from ezdxf.math import Vec3
+    from ezdxf.math import Vec2, Vec3
+    from ezdxf.addons.drawing import Frontend, RenderContext
+    from ezdxf.addons.drawing.properties import LayoutProperties
 except ImportError:
     sys.stderr.write('Error: ezdxf is required. Install via pip install ezdxf\n')
     sys.exit(1)
@@ -24,6 +28,11 @@ class DXFEncoder(json.JSONEncoder):
         # Handle array.array objects
         elif isinstance(obj, array.array):
             return list(obj)
+        # Handle vectors
+        elif isinstance(obj, (Vec2, Vec3)):
+            if hasattr(obj, 'z'):
+                return [obj.x, obj.y, obj.z]
+            return [obj.x, obj.y]
         # Handle other numpy types
         elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64, 
                              np.uint8, np.uint16, np.uint32, np.uint64)):
@@ -41,9 +50,11 @@ def round_point(point, precision=6):
         return [round(v, precision) for v in point]
     elif isinstance(point, np.ndarray):
         return [round(float(v), precision) for v in point]
-    elif hasattr(point, 'x') and hasattr(point, 'y'):
+    elif isinstance(point, (Vec2, Vec3)):
+        if hasattr(point, 'z'):
+            return [round(point.x, precision), round(point.y, precision), round(point.z, precision)]
         return [round(point.x, precision), round(point.y, precision)]
-    elif isinstance(point, Vec3):
+    elif hasattr(point, 'x') and hasattr(point, 'y'):
         return [round(point.x, precision), round(point.y, precision)]
     return point
 
@@ -51,7 +62,17 @@ def format_points(points, precision=6):
     """Format a list of points to specified precision"""
     return [round_point(p, precision) for p in points]
 
-def parse_dxf(filepath):
+def parse_dxf(filepath: str, config: Optional[Dict[str, Any]] = None) -> Dict[str, List[Dict[str, Any]]]:
+    """
+    Parse DXF file using ezdxf and extract entity data.
+    
+    Args:
+        filepath: Path to the DXF file
+        config: Optional configuration parameters
+        
+    Returns:
+        Dict mapping layer names to lists of entity data
+    """
     try:
         doc = ezdxf.readfile(filepath)
     except Exception as e:
@@ -60,6 +81,18 @@ def parse_dxf(filepath):
     
     msp = doc.modelspace()
     tree = {}
+    
+    # Create a RenderContext to get access to the drawing properties
+    # This helps with colors, line types, and other graphical properties
+    # Setup rendering context
+    render_context = None
+    frontend = None
+    try:
+        render_context = RenderContext(doc)
+        layout_properties = LayoutProperties.from_layout(msp)
+        frontend = Frontend(render_context, layout_properties)
+    except Exception as e:
+        sys.stderr.write(f'Warning: Could not create render context: {e}\n')
     
     # Process each entity in the model space
     for e in msp:
@@ -72,6 +105,29 @@ def parse_dxf(filepath):
             'handle': e.dxf.handle,
             'layer': layer
         }
+        
+        # Add color information if available
+        try:
+            if hasattr(e.dxf, 'color'):
+                color_value = e.dxf.color
+                common_attrs['color'] = color_value
+                # Try to get the actual RGB color
+                if render_context:
+                    try:
+                        rgb = render_context.colors.get_color(e)
+                        if rgb:
+                            common_attrs['rgb'] = rgb.hex_rgb()
+                    except:
+                        pass
+        except Exception:
+            pass
+            
+        # Add linetype information if available
+        try:
+            if hasattr(e.dxf, 'linetype'):
+                common_attrs['linetype'] = e.dxf.linetype
+        except Exception:
+            pass
         
         # Entity-specific attributes
         data = None
@@ -105,6 +161,13 @@ def parse_dxf(filepath):
                 'start_angle': round(e.dxf.start_angle, 6),
                 'end_angle': round(e.dxf.end_angle, 6),
             }
+            
+            # Add SVG arc flags for easier rendering
+            # Arc direction: CCW (counter-clockwise) is the default for DXF
+            is_large_arc = abs(e.dxf.end_angle - e.dxf.start_angle) > 180
+            is_ccw = True  # DXF arcs are CCW by default
+            data['large_arc'] = is_large_arc
+            data['sweep'] = is_ccw
         
         elif etype == 'ELLIPSE':
             data = {
@@ -115,6 +178,15 @@ def parse_dxf(filepath):
                 'start_param': round(e.dxf.start_param, 6),
                 'end_param': round(e.dxf.end_param, 6),
             }
+            
+            # Try to calculate actual start and end angles for easier rendering
+            try:
+                start_angle = e.start_angle
+                end_angle = e.end_angle
+                data['start_angle'] = round(start_angle, 6)
+                data['end_angle'] = round(end_angle, 6)
+            except Exception:
+                pass
         
         # --------- CURVE ENTITIES ---------
         elif etype == 'LWPOLYLINE':
@@ -156,9 +228,18 @@ def parse_dxf(filepath):
                 # Handle weights - in different ezdxf versions this might be a property or a method
                 if hasattr(e, 'weights'):
                     if callable(e.weights):
-                        data['weights'] = e.weights()
+                        data['weights'] = [round(w, 6) for w in e.weights()]
                     else:
-                        data['weights'] = e.weights
+                        data['weights'] = [round(w, 6) for w in e.weights]
+                        
+                # Get approximation points for easier rendering
+                try:
+                    if hasattr(e, 'approximate'):
+                        segments = min(32, max(8, e.dxf.degree * 8))  # More segments for higher degree
+                        points = list(e.approximate(segments=segments))
+                        data['points'] = format_points(points)
+                except Exception:
+                    pass
             except Exception as ex:
                 data = {
                     **common_attrs,
@@ -191,6 +272,62 @@ def parse_dxf(filepath):
                 'pattern_angle': round(e.dxf.pattern_angle, 6) if hasattr(e.dxf, 'pattern_angle') else 0.0,
                 'paths': len(e.paths),
             }
+            
+            # Extract boundary paths for rendering
+            try:
+                boundary_paths = []
+                for path in e.paths:
+                    # Handle different types of paths
+                    if path.PATH_TYPE == 'EdgePath':
+                        path_data = {"type": "edge", "edges": []}
+                        for edge in path.edges:
+                            if edge.EDGE_TYPE == 'LineEdge':
+                                path_data["edges"].append({
+                                    "type": "line",
+                                    "start": round_point(edge.start),
+                                    "end": round_point(edge.end)
+                                })
+                            elif edge.EDGE_TYPE == 'ArcEdge':
+                                path_data["edges"].append({
+                                    "type": "arc",
+                                    "center": round_point(edge.center),
+                                    "radius": round(edge.radius, 6),
+                                    "start_angle": round(edge.start_angle, 6),
+                                    "end_angle": round(edge.end_angle, 6)
+                                })
+                            elif edge.EDGE_TYPE == 'EllipseEdge':
+                                path_data["edges"].append({
+                                    "type": "ellipse",
+                                    "center": round_point(edge.center),
+                                    "major_axis": round_point(edge.major_axis),
+                                    "ratio": round(edge.ratio, 6),
+                                    "start_angle": round(edge.start_angle, 6),
+                                    "end_angle": round(edge.end_angle, 6)
+                                })
+                            elif edge.EDGE_TYPE == 'SplineEdge':
+                                points = []
+                                if hasattr(edge, 'control_points'):
+                                    points = edge.control_points
+                                elif hasattr(edge, 'points'):
+                                    points = edge.points
+                                path_data["edges"].append({
+                                    "type": "spline",
+                                    "points": format_points(points),
+                                    "degree": edge.degree
+                                })
+                        boundary_paths.append(path_data)
+                    elif path.PATH_TYPE == 'PolylinePath':
+                        path_data = {
+                            "type": "polyline",
+                            "points": format_points(path.vertices),
+                            "closed": path.is_closed
+                        }
+                        boundary_paths.append(path_data)
+                        
+                if boundary_paths:
+                    data['boundary_paths'] = boundary_paths
+            except Exception as e:
+                data['boundary_error'] = str(e)
         
         elif etype == 'SOLID':
             points = [
@@ -220,6 +357,8 @@ def parse_dxf(filepath):
                     **common_attrs,
                     'vertex_count': len(vertices),
                     'face_count': len(faces),
+                    'vertices': vertices,
+                    'faces': faces
                 }
             except Exception as ex:
                 data = {**common_attrs, 'error': str(ex)}
@@ -262,6 +401,49 @@ def parse_dxf(filepath):
                     round(getattr(e.dxf, 'zscale', 1.0), 6)
                 ],
             }
+            
+            # Try to expand block references for better rendering
+            try:
+                if hasattr(e, 'virtual_entities'):
+                    blockname = e.dxf.name
+                    data['entities'] = []
+                    
+                    for virtual_entity in e.virtual_entities():
+                        ve_type = virtual_entity.dxftype()
+                        ve_data = {
+                            'type': ve_type,
+                            'handle': virtual_entity.dxf.handle,
+                            'block': blockname
+                        }
+                        
+                        # Handle specific entity types
+                        if ve_type == 'LINE':
+                            ve_data.update({
+                                'start': round_point(virtual_entity.dxf.start),
+                                'end': round_point(virtual_entity.dxf.end)
+                            })
+                        elif ve_type == 'CIRCLE':
+                            ve_data.update({
+                                'center': round_point(virtual_entity.dxf.center),
+                                'radius': round(virtual_entity.dxf.radius, 6)
+                            })
+                        elif ve_type == 'ARC':
+                            ve_data.update({
+                                'center': round_point(virtual_entity.dxf.center),
+                                'radius': round(virtual_entity.dxf.radius, 6),
+                                'start_angle': round(virtual_entity.dxf.start_angle, 6),
+                                'end_angle': round(virtual_entity.dxf.end_angle, 6)
+                            })
+                        elif ve_type == 'TEXT' or ve_type == 'MTEXT':
+                            ve_data.update({
+                                'text': virtual_entity.dxf.text if hasattr(virtual_entity.dxf, 'text') else '',
+                                'insert': round_point(virtual_entity.dxf.insert if hasattr(virtual_entity.dxf, 'insert') else (0, 0)),
+                                'height': round(virtual_entity.dxf.height, 6) if hasattr(virtual_entity.dxf, 'height') else 1.0
+                            })
+                        
+                        data['entities'].append(ve_data)
+            except Exception as ex:
+                data['block_error'] = str(ex)
         
         # --------- ADVANCED ENTITIES ---------
         elif etype == 'IMAGE':
@@ -316,11 +498,28 @@ def parse_dxf(filepath):
         if data:
             tree.setdefault(layer, []).append(data)
     
-    # Export as JSON with custom encoder to handle numpy arrays and other special types
-    json.dump(tree, sys.stdout, cls=DXFEncoder)
+    return tree
+
+def main():
+    parser = argparse.ArgumentParser(description='Parse DXF file and output JSON data')
+    parser.add_argument('file', help='Path to DXF file')
+    parser.add_argument('--config', help='JSON configuration string')
+    args = parser.parse_args()
+    
+    config = None
+    if args.config:
+        try:
+            config = json.loads(args.config)
+        except json.JSONDecodeError:
+            sys.stderr.write('Error: Invalid JSON configuration\n')
+            sys.exit(1)
+    
+    try:
+        tree = parse_dxf(args.file, config)
+        json.dump(tree, sys.stdout, cls=DXFEncoder)
+    except Exception as e:
+        sys.stderr.write(f'Error: {str(e)}\n')
+        sys.exit(1)
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        sys.stderr.write('Usage: parse_dxf.py <file.dxf>\n')
-        sys.exit(1)
-    parse_dxf(sys.argv[1])
+    main()

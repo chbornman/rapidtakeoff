@@ -1,9 +1,8 @@
 import React, { useState } from "react";
-import FileComponentTree from "./FileComponentTree";
+import ComponentTree from "./ComponentTree";
 import {
   UserCircleIcon,
   FolderIcon,
-  ClipboardDocumentListIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   RocketLaunchIcon,
@@ -11,13 +10,19 @@ import {
 import TabNavigator from "./TabNavigator";
 import { colors, sizes, components } from "../styles/theme";
 
-import { SelectedFeature } from "./types";
+import { SelectedFeature, LayerVisibility } from "./types";
 
 interface LeftSidebarProps {
   onAccount: () => void;
   onFileSelect: (filePath: string) => void;
   filePath?: string | null;
   onFeatureSelect?: (feature: SelectedFeature | null) => void;
+  /** Callback to change layer visibility, integrated into component tree */
+  onLayerVisibilityChange: (visibility: LayerVisibility) => void;
+  /** Callback to change component visibility state */
+  onComponentVisibilityChange: (visibility: Record<string, Record<string, boolean>>) => void;
+  /** Close the currently open DXF file */
+  onFileClose: () => void;
 }
 
 export default function LeftSidebar({
@@ -25,6 +30,9 @@ export default function LeftSidebar({
   onFileSelect,
   filePath,
   onFeatureSelect,
+  onLayerVisibilityChange,
+  onComponentVisibilityChange,
+  onFileClose,
 }: LeftSidebarProps) {
   // open file dialog and render DXF to SVG
   const openFile = async () => {
@@ -75,14 +83,14 @@ export default function LeftSidebar({
       </div>
       {!collapsed && (
         <TabNavigator
-          defaultActive="files" // Set files tab as the default
+          defaultActive="navigator"
           tabs={[
             {
               id: "navigator",
               icon: FolderIcon,
               ariaLabel: "Project Navigator",
               content: (
-                <div className="p-2">
+                <div className="p-2 space-y-2">
                   <button
                     onClick={openFile}
                     className="w-full"
@@ -92,25 +100,32 @@ export default function LeftSidebar({
                         : components.button.secondary.backgroundColor,
                       color: components.button.secondary.textColor,
                       borderRadius: components.button.secondary.borderRadius,
-                      padding: "6px 10px", // Reduced padding
+                      padding: "6px 10px",
                     }}
                     onMouseEnter={() => setFileButtonHovered(true)}
                     onMouseLeave={() => setFileButtonHovered(false)}
                   >
                     Open DXF File
                   </button>
-                </div>
-              ),
-            },
-            {
-              id: "files",
-              icon: ClipboardDocumentListIcon,
-              ariaLabel: "Open Files",
-              content: (
-                <div className="p-1">
-                  <FileComponentTree 
-                    filePath={filePath} 
+                  {filePath && (
+                    <button
+                      onClick={onFileClose}
+                      className="w-full"
+                      style={{
+                        backgroundColor: components.button.secondary.backgroundColor,
+                        color: components.button.secondary.textColor,
+                        borderRadius: components.button.secondary.borderRadius,
+                        padding: "6px 10px",
+                      }}
+                    >
+                      Close DXF File
+                    </button>
+                  )}
+                  <ComponentTree
+                    filePath={filePath}
                     onFeatureSelect={onFeatureSelect}
+                    onLayerVisibilityChange={onLayerVisibilityChange}
+                    onComponentVisibilityChange={onComponentVisibilityChange}
                   />
                 </div>
               ),

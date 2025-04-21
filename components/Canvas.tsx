@@ -1,832 +1,538 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import {
-  colors,
-  shadows,
-  components as themeComponents,
-} from "../styles/theme";
-import type { SVGRendererConfig, SelectedFeature } from "./types";
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { DXFData, Entity, LayerVisibility, SelectedFeature } from './types';
+import OriginAxes from './entities/OriginAxes';
+import DxfEntity from './entities/DxfEntity';
 
-/**
- * SVG Canvas to render ezdxf-generated SVG markup.
- * Props:
- *  - data: raw SVG string
- *  - rendererConfig: optional configuration for the SVG renderer
- *  - selectedFeature: currently selected feature to highlight
- *  - onFeatureSelect: callback when user selects a feature by clicking on the canvas
- */
 interface CanvasProps {
-  data: string;
-  rendererConfig?: SVGRendererConfig;
-  selectedFeature?: SelectedFeature | null;
-  onFeatureSelect?: (feature: SelectedFeature | null) => void;
+  dxfData: DXFData | null;
+  layerVisibility: LayerVisibility;
+  componentVisibility: Record<string, Record<string, boolean>>;
+  selectedFeature: SelectedFeature | null;
+  onFeatureSelect: (feature: SelectedFeature | null) => void;
+  rendererConfig?: any;
 }
 
-export default function Canvas({
-  data,
-  rendererConfig,
+/**
+ * Canvas component for rendering DXF files
+ * This is the main component for rendering DXF data as SVG
+ */
+const Canvas: React.FC<CanvasProps> = ({
+  dxfData,
+  layerVisibility,
+  componentVisibility,
   selectedFeature,
   onFeatureSelect,
-}: CanvasProps) {
-  // Only raw SVG markup is supported
-  if (!data || typeof data !== "string") {
-    return null;
-  }
-
-  // Canvas zoom/pan configuration values
-  const [canvasConfig, setCanvasConfig] = useState({
-    INITIAL_ZOOM: 1,
-    MIN_ZOOM: 0.1,
-    MAX_ZOOM: 10,
-    ZOOM_IN_FACTOR: 1.1,
-    ZOOM_OUT_FACTOR: 0.9,
-  });
-
-  // Load canvas configuration values from renderer config JSON
-  useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        // @ts-ignore - electron is declared in the global scope via preload
-        const config = await window.electron.getRendererConfig();
-        if (config) {
-          // Only update canvas-specific config values
-          setCanvasConfig({
-            INITIAL_ZOOM: config.INITIAL_ZOOM || 1,
-            MIN_ZOOM: config.MIN_ZOOM || 0.1,
-            MAX_ZOOM: config.MAX_ZOOM || 10,
-            ZOOM_IN_FACTOR: config.ZOOM_IN_FACTOR || 1.1,
-            ZOOM_OUT_FACTOR: config.ZOOM_OUT_FACTOR || 0.9,
-          });
-        }
-      } catch (error) {
-        console.error("Error loading canvas config:", error);
-        // We don't need to handle errors here as it's handled in the parent component
-      }
-    };
-    loadConfig();
-  }, []);
-
-  // Use only provided config without defaults
-  const config = rendererConfig || {};
+  rendererConfig = {}
+}) => {
+  // Canvas state
+  const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const svgWrapperRef = useRef<HTMLDivElement>(null);
-  const [zoom, setZoom] = useState(canvasConfig.INITIAL_ZOOM);
-  const [offset, setOffset] = useState<{ x: number; y: number }>({
-    x: 0,
-    y: 0,
+  
+  // Responsive sizing
+  const [canvasSize, setCanvasSize] = useState({
+    width: 800,
+    height: 600
   });
-  const [isPanning, setIsPanning] = useState(false);
-  const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const offsetStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  // Track pointer position (SVG coords) and container size for overlay display
-  const [pointerPos, setPointerPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  
+  // Viewport state
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [boundingBox, setBoundingBox] = useState({ 
+    minX: 0, minY: 0, maxX: 0, maxY: 0, 
+    width: 0, height: 0, centerX: 0, centerY: 0 
+  });
 
-  // Update container size on mount and window resize
+  // Update canvas size when the window resizes
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
-        const { width, height } = containerRef.current.getBoundingClientRect();
-        setContainerSize({ width: Math.floor(width), height: Math.floor(height) });
+        setCanvasSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight
+        });
       }
     };
+    
+    // Initialize size
     updateSize();
+    
+    // Add resize listener
     window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
+    
+    // Check size after a small delay to ensure the container has rendered
+    const initialSizeTimer = setTimeout(updateSize, 100);
+    
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      clearTimeout(initialSizeTimer);
+    };
   }, []);
 
-  // Add styles for hover effects and highlighting selected features
-  useEffect(() => {
-    // Create a style element for our hover effects if it doesn't exist
-    if (!document.getElementById("svg-hover-styles")) {
-      const styleEl = document.createElement("style");
-      styleEl.id = "svg-hover-styles";
-      styleEl.textContent = `
-        svg path:hover, svg line:hover, svg circle:hover, 
-        svg rect:hover, svg polyline:hover, svg ellipse:hover,
-        svg polyline:hover, svg polygon:hover {
-          stroke-width: 2px !important;
-          cursor: pointer !important;
-          stroke-opacity: 0.8 !important;
+  // Prepare flat list of entities from DXF data with IDs
+  const entities = React.useMemo(() => {
+    if (!dxfData) return [];
+    
+    const result: Entity[] = [];
+    Object.entries(dxfData).forEach(([layerName, entities]) => {
+      // Skip invisible layers
+      if (!layerVisibility[layerName]) return;
+      
+      entities.forEach((entity, index) => {
+        const id = entity.handle;
+        // Skip invisible components
+        if (
+          componentVisibility[layerName] && 
+          componentVisibility[layerName][id] === false
+        ) {
+          return;
         }
         
-        .highlighted-feature {
-          stroke: #FF0000 !important;
-          stroke-width: 2px !important;
-          fill-opacity: 0.7 !important;
-        }
-        
-        /* Force stroke color for selected elements */
-        svg .highlighted-feature {
-          stroke: #FF0000 !important;
-        }
-      `;
-      document.head.appendChild(styleEl);
-    }
-  }, []);
-
-  // Auto-center and fit the SVG content on first load
-  const autoFitContent = useCallback(() => {
-    const svgEl = svgWrapperRef.current?.querySelector("svg");
-    if (!svgEl) return;
-
-    try {
-      // Determine SVG dimensions (use viewBox if available, otherwise bounding box)
-      let svgWidth: number, svgHeight: number;
-      let minX: number = 0,
-        minY: number = 0;
-      const viewBoxAttr = svgEl.getAttribute("viewBox");
-      if (viewBoxAttr) {
-        const [vbX, vbY, vbWidth, vbHeight] = viewBoxAttr
-          .split(" ")
-          .map(Number);
-        minX = vbX;
-        minY = vbY;
-        svgWidth = vbWidth;
-        svgHeight = vbHeight;
-      } else {
-        const bbox = svgEl.getBBox();
-        minX = bbox.x;
-        minY = bbox.y;
-        svgWidth = bbox.width;
-        svgHeight = bbox.height;
-      }
-
-      // Get container dimensions
-      const container = containerRef.current;
-      if (!container || svgWidth === 0 || svgHeight === 0) return;
-      const { width: containerWidth, height: containerHeight } =
-        container.getBoundingClientRect();
-
-      // Calculate appropriate zoom level to fit
-      const widthRatio = containerWidth / svgWidth;
-      const heightRatio = containerHeight / svgHeight;
-      const fitZoom = Math.min(widthRatio, heightRatio) * 0.9; // 90% to add some margin
-
-      // Calculate the center of the viewBox in SVG coordinate space
-      const boxCenterX = minX + svgWidth / 2;
-      const boxCenterY = minY + svgHeight / 2;
-
-      // Set appropriate zoom
-      setZoom(fitZoom);
-
-      // Calculate offset to center the viewBox center in the container
-      setOffset({
-        x: containerWidth / 2 - boxCenterX * fitZoom,
-        y: containerHeight / 2 - boxCenterY * fitZoom,
+        // Add to visible entities list
+        result.push(entity);
       });
-
-      console.log("Auto fit content:", {
-        viewBox: { minX, minY, width: svgWidth, height: svgHeight },
-        center: { x: boxCenterX, y: boxCenterY },
-        containerSize: { width: containerWidth, height: containerHeight },
-        zoom: fitZoom,
-      });
-    } catch (e) {
-      console.error("Error auto-fitting content:", e);
-    }
-  }, []);
-
-  // Ensure SVG scales to container
-  useEffect(() => {
-    const svgEl = svgWrapperRef.current?.querySelector("svg");
-    if (svgEl) {
-      // Make SVG responsive within container
-      svgEl.setAttribute("width", "100%");
-      svgEl.setAttribute("height", "100%");
-      svgEl.setAttribute("preserveAspectRatio", "xMidYMid meet");
-    }
-  }, [data]);
-
-  // Handle feature selection highlighting - simplified approach
-  useEffect(() => {
-    const svgEl = svgWrapperRef.current?.querySelector("svg");
-    if (!svgEl) return;
-
-    // Reset previous selections first
-    const previousSelectedElements = svgEl.querySelectorAll(
-      ".highlighted-feature",
-    );
-    previousSelectedElements.forEach((el) => {
-      el.classList.remove("highlighted-feature");
-      if (el instanceof SVGElement) {
-        // Restore original stroke color and other properties
-        el.style.stroke = "";
-        el.style.strokeWidth = "";
-      }
     });
+    return result;
+  }, [dxfData, layerVisibility, componentVisibility]);
 
-    // If no feature is selected, just cleanup and return
-    if (!selectedFeature) return;
-
-    try {
-      // Get the entity type and index from the selected feature
-      const entityType = selectedFeature.entityType.toLowerCase();
-      const entityIndex = selectedFeature.entityIndex;
-
-      // First approach: Try to select element directly by its index across all SVG shapes
-      // We'll look for specific tag types based on the entity type
-      let targetTags: string[] = [];
-
-      // Map DXF entity types to SVG tag names
-      switch (entityType) {
-        // Basic Geometric Entities
-        case "line":
-          targetTags = ["line"];
-          break;
-        case "point":
-          targetTags = ["circle", "path"]; // Points are often rendered as tiny circles
-          break;
-        case "circle":
-          targetTags = ["circle"];
-          break;
-        case "arc":
-          targetTags = ["path"];
-          break;
-        case "ellipse":
-          targetTags = ["ellipse", "path"]; // Some renderers use paths for ellipses
-          break;
-
-        // Curve Entities
-        case "spline":
-          targetTags = ["path"];
-          break;
-        case "polyline":
-        case "lwpolyline":
-          targetTags = ["polyline", "path", "polygon"];
-          break;
-        case "helix":
-          targetTags = ["path"];
-          break;
-        case "leader":
-          targetTags = ["path", "polyline"];
-          break;
-
-        // Complex Entities
-        case "hatch":
-          targetTags = ["path", "g"];
-          break;
-        case "solid":
-        case "3dface":
-          targetTags = ["polygon", "path"];
-          break;
-        case "mesh":
-          targetTags = ["path", "g"];
-          break;
-        case "3dsolid":
-        case "body":
-          targetTags = ["path", "g"];
-          break;
-
-        // Dimension Entities
-        case "dimension":
-          targetTags = ["g", "path", "text"];
-          break;
-        case "mtext":
-        case "text":
-          targetTags = ["text", "tspan"];
-          break;
-
-        // Organizational Entities
-        case "insert":
-          targetTags = ["g", "use"];
-          break;
-
-        // Advanced Entities
-        case "image":
-          targetTags = ["image"];
-          break;
-        case "wipeout":
-          targetTags = ["path", "rect"];
-          break;
-        case "acad_table":
-          targetTags = ["g", "text", "rect", "line"];
-          break;
-        case "mline":
-          targetTags = ["g", "path", "polyline"];
-          break;
-        case "attdef":
-        case "attrib":
-          targetTags = ["text"];
-          break;
-
-        default:
-          // If we don't know the specific mapping, try all shape elements
-          targetTags = [
-            "path",
-            "line",
-            "circle",
-            "rect",
-            "ellipse",
-            "polyline",
-            "polygon",
-            "g",
-            "text",
-            "image",
-            "use",
-          ];
-      }
-
-      // Find elements based on target tags and try to match by index
-      let foundMatch = false;
-
-      // First try: Find elements of the matching type and select by index
-      for (const tag of targetTags) {
-        const elements = svgEl.querySelectorAll(tag);
-
-        // If we have enough elements of this type, select the one at our index
-        if (elements.length > entityIndex) {
-          const el = elements[entityIndex];
-          if (el instanceof SVGElement) {
-            el.classList.add("highlighted-feature");
-            foundMatch = true;
-            break;
-          }
-        }
-      }
-
-      // Second try: Select the Nth element of any type if first approach failed
-      if (!foundMatch) {
-        // First, prepare a flat array of all shapes in document order
-        const allShapes = svgEl.querySelectorAll(
-          "path, line, circle, rect, ellipse, polyline, polygon",
-        );
-
-        // If we have enough elements, select the one at our index
-        if (allShapes.length > entityIndex) {
-          const el = allShapes[entityIndex];
-          if (el instanceof SVGElement) {
-            el.classList.add("highlighted-feature");
-            foundMatch = true;
-          }
-        }
-      }
-
-      // Third try: Select any elements with matching layer if available
-      if (!foundMatch && selectedFeature.layerName) {
-        const layerGroup = svgEl.querySelector(
-          `g[data-layer="${selectedFeature.layerName}"]`,
-        );
-        if (layerGroup) {
-          const shapes = layerGroup.querySelectorAll(
-            "path, line, circle, rect, ellipse, polyline, polygon",
-          );
-          if (shapes.length > 0) {
-            // Either select the specific one at index or highlight all in layer
-            if (shapes.length > entityIndex) {
-              const el = shapes[entityIndex];
-              if (el instanceof SVGElement) {
-                el.classList.add("highlighted-feature");
-                foundMatch = true;
-              }
-            } else {
-              // Highlight all shapes in the layer if we can't find a specific match
-              shapes.forEach((shape) => {
-                if (shape instanceof SVGElement) {
-                  shape.classList.add("highlighted-feature");
-                }
-              });
-              foundMatch = true;
-            }
-          }
-        }
-      }
-
-      // Last resort: Highlight everything in the SVG if all else fails
-      if (!foundMatch) {
-        const allElements = svgEl.querySelectorAll(
-          "path, line, circle, rect, ellipse, polyline, polygon",
-        );
-        if (allElements.length > 0) {
-          // If we have many elements, try to limit to just a few around our index
-          if (allElements.length > 20) {
-            // Try to highlight a few elements around the target index
-            const startIdx = Math.max(0, entityIndex - 2);
-            const endIdx = Math.min(allElements.length - 1, entityIndex + 2);
-
-            for (let i = startIdx; i <= endIdx; i++) {
-              const el = allElements[i];
-              if (el instanceof SVGElement) {
-                el.classList.add("highlighted-feature");
-              }
-            }
-          } else {
-            // If not too many elements, highlight them all
-            allElements.forEach((el) => {
-              if (el instanceof SVGElement) {
-                el.classList.add("highlighted-feature");
-              }
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error highlighting selected feature:", error);
-    }
-  }, [selectedFeature, data]);
-
-  // Removed handleWheel as we're now using the addEventListener approach
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsPanning(true);
-    panStart.current = { x: e.clientX, y: e.clientY };
-    offsetStart.current = offset;
-  };
-  const handleMouseMove = (e: React.MouseEvent) => {
-    // Update pointer position in SVG coordinates
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const relX = e.clientX - rect.left;
-      const relY = e.clientY - rect.top;
-      const svgX = (relX - offset.x) / zoom;
-      const svgY = (relY - offset.y) / zoom;
-      setPointerPos({ x: +svgX.toFixed(2), y: +svgY.toFixed(2) });
-    }
-    if (!isPanning) return;
-    e.preventDefault();
-    const dx = e.clientX - panStart.current.x;
-    const dy = e.clientY - panStart.current.y;
-    setOffset({ x: offsetStart.current.x + dx, y: offsetStart.current.y + dy });
-  };
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (isPanning) {
-      setIsPanning(false);
-    }
-  };
-
-  // Handle element click to select a feature
-  const handleElementClick = (e: React.MouseEvent) => {
-    // Don't process clicks if we're panning
-    if (isPanning) return;
-
-    // Find the clicked SVG element
-    let target = e.target as Element;
-
-    // Skip if we clicked the background or SVG container
-    if (
-      !(target instanceof SVGElement) ||
-      target.tagName.toLowerCase() === "svg" ||
-      target === svgWrapperRef.current
-    ) {
+  // Calculate bounding box of all entities
+  useEffect(() => {
+    if (!entities || entities.length === 0) {
+      // Set a default bounding box centered on the origin
+      setBoundingBox({
+        minX: -10, minY: -10, maxX: 10, maxY: 10,
+        width: 20, height: 20, centerX: 0, centerY: 0
+      });
       return;
     }
 
-    // If we clicked a generic group, try to find a better target
-    if (target.tagName.toLowerCase() === "g") {
-      // Try to find first child element that's an actual shape
-      const firstShape = target.querySelector(
-        "path, line, circle, rect, ellipse, polyline, polygon",
-      );
-      if (firstShape) {
-        target = firstShape;
-      }
-    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
 
-    // Get layer information
-    const layerGroup = target.closest("[data-layer]");
-    const layerName = layerGroup?.getAttribute("data-layer") || "DEFAULT";
-
-    // Get entity type - prefer data attribute, fall back to tag name
-    const entityType =
-      target.getAttribute("data-entity-type") || target.tagName.toUpperCase();
-
-    // Find entity index within its type and layer
-    let entityIndex = 0;
-    let sameTypeElements: NodeListOf<Element>;
-
-    if (layerGroup) {
-      // Find all elements of same type in this layer
-      sameTypeElements = layerGroup.querySelectorAll(
-        `[data-entity-type="${entityType}"], ${entityType.toLowerCase()}`,
-      );
-    } else {
-      // Fallback: find all elements of same type in whole SVG
-      sameTypeElements =
-        svgWrapperRef.current?.querySelectorAll(
-          `[data-entity-type="${entityType}"], ${entityType.toLowerCase()}`,
-        ) || document.createDocumentFragment().querySelectorAll("*");
-    }
-
-    entityIndex = Array.from(sameTypeElements).indexOf(target);
-
-    // Skip if we couldn't determine the index
-    if (entityIndex === -1) return;
-
-    // Create entity object with properties from SVG attributes
-    const entity: any = {
-      type: entityType,
-      handle: target.getAttribute("data-handle") || undefined,
-      layer: layerName,
-    };
-
-    // Add geometry properties based on element type
-    const tagName = target.tagName.toLowerCase();
-
-    switch (tagName) {
-      case "circle":
-        entity.center = [
-          parseFloat(target.getAttribute("cx") || "0"),
-          parseFloat(target.getAttribute("cy") || "0"),
-        ];
-        entity.radius = parseFloat(target.getAttribute("r") || "0");
-        break;
-
-      case "line":
-        entity.start = [
-          parseFloat(target.getAttribute("x1") || "0"),
-          parseFloat(target.getAttribute("y1") || "0"),
-        ];
-        entity.end = [
-          parseFloat(target.getAttribute("x2") || "0"),
-          parseFloat(target.getAttribute("y2") || "0"),
-        ];
-        break;
-
-      case "rect":
-        entity.x = parseFloat(target.getAttribute("x") || "0");
-        entity.y = parseFloat(target.getAttribute("y") || "0");
-        entity.width = parseFloat(target.getAttribute("width") || "0");
-        entity.height = parseFloat(target.getAttribute("height") || "0");
-        break;
-
-      case "path":
-        entity.d = target.getAttribute("d") || "";
-        break;
-
-      case "polyline":
-      case "polygon":
-        entity.points = target.getAttribute("points") || "";
-        break;
-    }
-
-    // Notify about the selection
-    if (onFeatureSelect) {
-      // Create the selection object
-      const feature: SelectedFeature = {
-        layerName,
-        entityType,
-        entityIndex,
-        entity,
-      };
-
-      // If clicking the same element that's already selected, deselect it
-      if (
-        selectedFeature &&
-        selectedFeature.layerName === layerName &&
-        selectedFeature.entityType === entityType &&
-        selectedFeature.entityIndex === entityIndex
-      ) {
-        onFeatureSelect(null);
-      } else {
-        onFeatureSelect(feature);
-      }
-    }
-  };
-
-  // Use useEffect to add wheel event listener with { passive: false } option
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // Import wheel handling from utils
-    import("./utils/wheel-handler")
-      .then(({ handleMouseWheel, calculateZoomOffset }) => {
-        const wheelHandler = (e: WheelEvent) => {
-          e.preventDefault();
-
-          // Use the extracted wheel handler with our config
-          const result = handleMouseWheel(e, zoom, {
-            zoomInFactor: canvasConfig.ZOOM_IN_FACTOR,
-            zoomOutFactor: canvasConfig.ZOOM_OUT_FACTOR,
-            minZoom: canvasConfig.MIN_ZOOM,
-            maxZoom: canvasConfig.MAX_ZOOM,
-            defaultDirection: "in", // Default to zoom in for small movements
-            zoomOutThreshold: 25, // Higher threshold for zoom out
-            zoomInThreshold: 5, // Lower threshold for zoom in
-            debug: true, // Enable debug logging
-          });
-
-          // If no significant change, exit early
-          if (!result) return;
-
-          const rect = container.getBoundingClientRect();
-          if (rect) {
-            // Calculate cursor position relative to the container
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
-
-            // Calculate new offset to keep cursor position stable
-            const newOffset = calculateZoomOffset(
-              mx,
-              my,
-              offset,
-              zoom,
-              result.newZoom,
-            );
-
-            // Update offset for position after zoom
-            setOffset(newOffset);
-          }
-
-          // Update zoom level
-          setZoom(result.newZoom);
-        };
-
-        container.addEventListener("wheel", wheelHandler, { passive: false });
-
-        // Store the cleanup function
-        return () => {
-          container.removeEventListener("wheel", wheelHandler);
-        };
-      })
-      .catch((err) => {
-        console.error("Failed to load wheel handler:", err);
-
-        // Fallback to basic wheel handling if module fails to load
-        const basicWheelHandler = (e: WheelEvent) => {
-          e.preventDefault();
-          const delta = -e.deltaY;
-          const factor =
-            delta > 0
-              ? canvasConfig.ZOOM_IN_FACTOR
-              : canvasConfig.ZOOM_OUT_FACTOR;
-          setZoom(
-            Math.min(
-              Math.max(zoom * factor, canvasConfig.MIN_ZOOM),
-              canvasConfig.MAX_ZOOM,
-            ),
-          );
-        };
-
-        container.addEventListener("wheel", basicWheelHandler, {
-          passive: false,
+    // Calculate bounds from all entities
+    entities.forEach(entity => {
+      // Check entity bounds based on type
+      if (entity.type === 'LINE') {
+        minX = Math.min(minX, entity.start[0], entity.end[0]);
+        minY = Math.min(minY, entity.start[1], entity.end[1]);
+        maxX = Math.max(maxX, entity.start[0], entity.end[0]);
+        maxY = Math.max(maxY, entity.start[1], entity.end[1]);
+      } else if (entity.type === 'CIRCLE') {
+        minX = Math.min(minX, entity.center[0] - entity.radius);
+        minY = Math.min(minY, entity.center[1] - entity.radius);
+        maxX = Math.max(maxX, entity.center[0] + entity.radius);
+        maxY = Math.max(maxY, entity.center[1] + entity.radius);
+      } else if (entity.type === 'ARC') {
+        minX = Math.min(minX, entity.center[0] - entity.radius);
+        minY = Math.min(minY, entity.center[1] - entity.radius);
+        maxX = Math.max(maxX, entity.center[0] + entity.radius);
+        maxY = Math.max(maxY, entity.center[1] + entity.radius);
+      } else if (entity.type === 'LWPOLYLINE' || entity.type === 'POLYLINE') {
+        entity.points?.forEach(point => {
+          minX = Math.min(minX, point[0]);
+          minY = Math.min(minY, point[1]);
+          maxX = Math.max(maxX, point[0]);
+          maxY = Math.max(maxY, point[1]);
         });
-
-        return () => {
-          container.removeEventListener("wheel", basicWheelHandler);
-        };
-      });
-
-    // Simple cleanup function for when component unmounts before module loads
-    return () => {
-      // This will be overridden if the module loads successfully
-    };
-  }, [zoom, offset, canvasConfig]);
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-full overflow-hidden"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onClick={handleElementClick}
-      style={{
-        cursor: isPanning ? "grabbing" : "pointer",
-        backgroundColor: themeComponents.canvas.backgroundColor,
-        boxShadow: themeComponents.canvas.shadow,
-      }}
-    >
-      {/* Overlay: canvas size and pointer position */}
-      <div className="absolute top-2 right-2 z-10 bg-black bg-opacity-50 text-white text-xs p-1 rounded">
-        <div>Canvas: {containerSize.width}px × {containerSize.height}px</div>
-        <div>Pointer: {pointerPos.x}, {pointerPos.y}</div>
-      </div>
-      {/* Zoom and pan controls */}
-      <div className="absolute top-2 left-2 z-10 flex space-x-2">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setZoom((z) =>
-              Math.min(z * canvasConfig.ZOOM_IN_FACTOR, canvasConfig.MAX_ZOOM),
-            );
-          }}
-          className="p-1 rounded"
-          style={{
-            // Use theme button primary styling
-            backgroundColor: themeComponents.button.primary.backgroundColor,
-            color: themeComponents.button.primary.textColor,
-            borderRadius: themeComponents.button.primary.borderRadius,
-          }}
-          title="Zoom In"
-        >
-          +
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setZoom((z) =>
-              Math.max(z * canvasConfig.ZOOM_OUT_FACTOR, canvasConfig.MIN_ZOOM),
-            );
-          }}
-          className="p-1 rounded"
-          style={{
-            // Use theme button primary styling
-            backgroundColor: themeComponents.button.primary.backgroundColor,
-            color: themeComponents.button.primary.textColor,
-            borderRadius: themeComponents.button.primary.borderRadius,
-          }}
-          title="Zoom Out"
-        >
-          -
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-
-            // Instead of resetting to origin, center the SVG in the container
-            const svgEl = svgWrapperRef.current?.querySelector("svg");
-            const container = containerRef.current;
-
-            if (svgEl && container) {
-              // Get container dimensions
-              const { width: containerWidth, height: containerHeight } =
-                container.getBoundingClientRect();
-
-              // Determine SVG dimensions
-              let svgWidth: number, svgHeight: number;
-              let minX: number = 0,
-                minY: number = 0;
-              const viewBoxAttr = svgEl.getAttribute("viewBox");
-              if (viewBoxAttr) {
-                const [vbX, vbY, vbWidth, vbHeight] = viewBoxAttr
-                  .split(" ")
-                  .map(Number);
-                minX = vbX;
-                minY = vbY;
-                svgWidth = vbWidth;
-                svgHeight = vbHeight;
-              } else {
-                const bbox = svgEl.getBBox();
-                minX = bbox.x;
-                minY = bbox.y;
-                svgWidth = bbox.width;
-                svgHeight = bbox.height;
-              }
-
-              // Calculate the center of the viewBox in SVG coordinate space
-              const boxCenterX = minX + svgWidth / 2;
-              const boxCenterY = minY + svgHeight / 2;
-
-              // Set initial zoom
-              setZoom(canvasConfig.INITIAL_ZOOM);
-
-              // Calculate offset to center the viewBox center in the container
-              setOffset({
-                x: containerWidth / 2 - boxCenterX * canvasConfig.INITIAL_ZOOM,
-                y: containerHeight / 2 - boxCenterY * canvasConfig.INITIAL_ZOOM,
+      } else if (entity.type === 'ELLIPSE') {
+        // Approximate ellipse bounds
+        const majorRadius = Math.sqrt(
+          entity.major_axis[0] * entity.major_axis[0] + 
+          entity.major_axis[1] * entity.major_axis[1]
+        );
+        const minorRadius = majorRadius * entity.ratio;
+        
+        minX = Math.min(minX, entity.center[0] - majorRadius);
+        minY = Math.min(minY, entity.center[1] - majorRadius);
+        maxX = Math.max(maxX, entity.center[0] + majorRadius);
+        maxY = Math.max(maxY, entity.center[1] + majorRadius);
+      } else if (entity.type === 'TEXT' || entity.type === 'MTEXT') {
+        minX = Math.min(minX, entity.insert[0]);
+        minY = Math.min(minY, entity.insert[1]);
+        maxX = Math.max(maxX, entity.insert[0] + (entity.height || 10) * 5); // Rough estimate for text width
+        maxY = Math.max(maxY, entity.insert[1] + (entity.height || 5));
+      } else if (entity.type === 'POINT') {
+        minX = Math.min(minX, entity.location[0] - 1);
+        minY = Math.min(minY, entity.location[1] - 1);
+        maxX = Math.max(maxX, entity.location[0] + 1);
+        maxY = Math.max(maxY, entity.location[1] + 1);
+      } else if (entity.type === 'SPLINE') {
+        entity.control_points?.forEach(point => {
+          minX = Math.min(minX, point[0]);
+          minY = Math.min(minY, point[1]);
+          maxX = Math.max(maxX, point[0]);
+          maxY = Math.max(maxY, point[1]);
+        });
+      } else if (entity.type === 'HATCH') {
+        // For HATCH, we don't have direct access to the boundaries here
+        // We'll use the boundary_paths if available
+        if (entity.boundary_paths) {
+          entity.boundary_paths.forEach(path => {
+            if (path.type === 'polyline' && path.points) {
+              path.points.forEach(point => {
+                minX = Math.min(minX, point[0]);
+                minY = Math.min(minY, point[1]);
+                maxX = Math.max(maxX, point[0]);
+                maxY = Math.max(maxY, point[1]);
               });
-
-              console.log("Reset view:", {
-                viewBox: { minX, minY, svgWidth, svgHeight },
-                center: { x: boxCenterX, y: boxCenterY },
-                zoom: canvasConfig.INITIAL_ZOOM,
+            } else if (path.type === 'edge' && path.edges) {
+              path.edges.forEach(edge => {
+                if (edge.type === 'line') {
+                  minX = Math.min(minX, edge.start[0], edge.end[0]);
+                  minY = Math.min(minY, edge.start[1], edge.end[1]);
+                  maxX = Math.max(maxX, edge.start[0], edge.end[0]);
+                  maxY = Math.max(maxY, edge.start[1], edge.end[1]);
+                } else if (edge.type === 'arc') {
+                  minX = Math.min(minX, edge.center[0] - edge.radius);
+                  minY = Math.min(minY, edge.center[1] - edge.radius);
+                  maxX = Math.max(maxX, edge.center[0] + edge.radius);
+                  maxY = Math.max(maxY, edge.center[1] + edge.radius);
+                }
               });
-            } else {
-              // Fallback to original behavior if we can't get dimensions
-              setZoom(canvasConfig.INITIAL_ZOOM);
-              setOffset({ x: 0, y: 0 });
             }
-          }}
-          className="p-1 rounded"
-          style={{
-            // Use theme button primary styling
-            backgroundColor: themeComponents.button.primary.backgroundColor,
-            color: themeComponents.button.primary.textColor,
-            borderRadius: themeComponents.button.primary.borderRadius,
-          }}
-          title="Reset View"
-        >
-          &#8635;
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            autoFitContent();
-          }}
-          className="p-1 rounded ml-2"
-          style={{
-            // Use theme button secondary styling
-            backgroundColor: themeComponents.button.secondary.backgroundColor,
-            color: themeComponents.button.secondary.textColor,
-            borderRadius: themeComponents.button.secondary.borderRadius,
-          }}
-          title="Fit to View"
-        >
-          <span style={{ fontSize: "14px" }}>&#x1F50D;</span>
-        </button>
+          });
+        }
+      }
+    });
+
+    // Handle edge case if no valid bounds were found
+    if (minX === Infinity) {
+      minX = -100;
+      minY = -100;
+      maxX = 100;
+      maxY = 100;
+    }
+
+    // Add more generous padding for initial view
+    const padding = Math.max((maxX - minX) * 0.2, (maxY - minY) * 0.2, 20);
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+
+    const boxWidth = maxX - minX;
+    const boxHeight = maxY - minY;
+    const centerX = minX + boxWidth / 2;
+    const centerY = minY + boxHeight / 2;
+
+    setBoundingBox({ 
+      minX, minY, maxX, maxY, 
+      width: boxWidth, 
+      height: boxHeight,
+      centerX, 
+      centerY 
+    });
+
+    // Calculate the scale based on the bounding box dimensions
+    const svgAspectRatio = canvasSize.width / canvasSize.height;
+    const boxAspectRatio = boxWidth / boxHeight;
+    
+    let newScale;
+    if (boxAspectRatio > svgAspectRatio) {
+      // Width is the constraint
+      newScale = canvasSize.width / boxWidth * 0.5; // Start more zoomed out (0.5 instead of 0.9)
+    } else {
+      // Height is the constraint
+      newScale = canvasSize.height / boxHeight * 0.5; // Start more zoomed out (0.5 instead of 0.9)
+    }
+    
+    // Apply initial scale factor from renderer config if available
+    if (rendererConfig?.initialScaleFactor) {
+      newScale *= rendererConfig.initialScaleFactor;
+    }
+    
+    // Always center on origin (0,0) instead of the bounding box center
+    setScale(newScale);
+    
+    // Since we modified the SVG transform to always center (0,0) at the canvas center,
+    // we reset the offset to (0,0) when a file is loaded
+    // This ensures the DXF origin (0,0) is always centered in the canvas
+    setOffset({ 
+      x: 0,
+      y: 0
+    });
+  }, [entities, canvasSize.width, canvasSize.height]);
+
+  // Mouse wheel zoom handler
+  const handleMouseWheel = useCallback((event: React.WheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    
+    // Get mouse position relative to the SVG element
+    const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    // Calculate zoom direction and amount
+    const direction = event.deltaY > 0 ? -1 : 1;
+    const zoomFactor = 0.1;
+    const factor = direction > 0 ? (1 + zoomFactor) : (1 / (1 + zoomFactor));
+    
+    // Calculate new scale with limits
+    let newScale = scale * factor;
+    newScale = Math.max(0.1, Math.min(100, newScale));
+    
+    // Calculate offset to zoom toward mouse position
+    const scaleDelta = newScale / scale;
+    
+    // Mouse position in SVG coordinates relative to the center of the canvas
+    const svgMouseX = mouseX - (canvasSize.width/2 + offset.x);
+    const svgMouseY = mouseY - (canvasSize.height/2 + offset.y);
+    
+    // Calculate new offset
+    const newOffset = {
+      x: offset.x - svgMouseX * (scaleDelta - 1),
+      y: offset.y - svgMouseY * (scaleDelta - 1)
+    };
+    
+    setScale(newScale);
+    setOffset(newOffset);
+  }, [scale, offset, canvasSize]);
+
+  // Track if we're actually dragging (moved after mousedown) or just clicking
+  const [hasMoved, setHasMoved] = useState(false);
+
+  // Mouse drag handlers
+  const handleMouseDown = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    // Allow panning with any mouse button
+    setIsDragging(true);
+    setHasMoved(false); // Reset movement tracking
+    setDragStart({ x: event.clientX, y: event.clientY });
+    event.preventDefault();
+  }, []);
+
+  const handleMouseMove = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    if (isDragging) {
+      // Calculate distance moved
+      const dx = event.clientX - dragStart.x;
+      const dy = event.clientY - dragStart.y;
+      
+      // Check if we've moved enough to consider it a drag
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+        setHasMoved(true);
+      }
+      
+      setOffset({
+        x: offset.x + dx,
+        y: offset.y + dy
+      });
+      setDragStart({ x: event.clientX, y: event.clientY });
+      event.preventDefault();
+    }
+  }, [isDragging, offset, dragStart]);
+
+  // Handle both regular and click events
+  const handleMouseUp = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    // If we didn't actually drag (just clicked), pass the event through
+    if (isDragging && !hasMoved && event.target) {
+      // Let entity clicks handle themselves
+      // Event bubbling will naturally allow clicks on entities
+    }
+    
+    setIsDragging(false);
+  }, [isDragging, hasMoved]);
+
+  // Derive list of visible layers for filtering
+  const visibleLayers = React.useMemo(() => {
+    return Object.entries(layerVisibility)
+      .filter(([_, isVisible]) => isVisible)
+      .map(([layerName]) => layerName);
+  }, [layerVisibility]);
+
+  // Create empty entities array if no data
+  const displayEntities = entities.length > 0 ? entities : [];
+  
+  // Track mouse position for coordinate display
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0, svgX: 0, svgY: 0 });
+  
+  // Handler to update mouse position
+  const handleMouseMoveWithCoords = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    // Original mouse move behavior for dragging
+    handleMouseMove(event);
+    
+    // Get mouse position in client coordinates
+    const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+    
+    // Convert to SVG/drawing coordinates, taking into account the new transform
+    // We need to subtract the canvas center position as well as the offset
+    // For Y coordinate, we negate the value because we flipped the Y axis in the transform
+    const svgX = (mouseX - (canvasSize.width/2 + offset.x)) / scale;
+    const svgY = -1 * (mouseY - (canvasSize.height/2 + offset.y)) / scale;
+    
+    // Update state with both client and SVG coordinates
+    setMousePosition({ x: mouseX, y: mouseY, svgX, svgY });
+  }, [handleMouseMove, offset, scale, canvasSize]);
+
+  // Render the canvas
+  return (
+    <div ref={containerRef} className="w-full h-full relative">
+      {/* Coordinate display overlay */}
+      <div className="absolute top-4 right-4 bg-black bg-opacity-70 text-white px-3 py-2 rounded-md font-mono text-sm z-10">
+        X: {mousePosition.svgX.toFixed(4)} Y: {mousePosition.svgY.toFixed(4)}
       </div>
-      <div
-        ref={svgWrapperRef}
-        style={{
-          transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-          transformOrigin: "0 0",
-          width: "100%",
-          height: "100%",
+      
+      <svg
+        ref={svgRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+        style={{ 
+          background: rendererConfig.backgroundColor || '#2e2e2e', 
+          cursor: isDragging ? 'grabbing' : 'grab', // Use grab cursor to indicate pannable canvas
+          touchAction: 'none' // Prevent browser handling of pan/zoom
         }}
-        dangerouslySetInnerHTML={{ __html: data }}
-      />
+        onWheel={handleMouseWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMoveWithCoords}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={() => {
+          setIsDragging(false);
+          setMousePosition({ x: 0, y: 0, svgX: 0, svgY: 0 });
+        }}
+      >
+        {/* Main graphics group with transformation 
+             First translate to center of canvas, then apply the offset, then scale
+             This ensures (0,0) is at the center of the canvas when offset is (0,0)
+             We flip the Y axis (scale(1, -1)) to match standard engineering coordinate system
+         */}
+        <g transform={`translate(${canvasSize.width/2 + offset.x}, ${canvasSize.height/2 + offset.y}) scale(${scale}, ${-scale})`}>
+          {/* Background grid (optional) */}
+          {rendererConfig.showGrid !== false && (
+            <g className="grid-lines">
+              {/* Create grid lines - scaled down by 10x for smaller DXF files */}
+              {Array.from({ length: 300 }, (_, i) => i - 150).map(i => (
+                <React.Fragment key={`grid-${i}`}>
+                  {/* Vertical grid lines (0.1 unit spacing) */}
+                  <line
+                    x1={i * 0.1}
+                    y1={-1000000}
+                    x2={i * 0.1}
+                    y2={1000000}
+                    stroke="#555555"
+                    strokeWidth={0.02 / scale}
+                    strokeDasharray={`${0.1 / scale},${0.3 / scale}`}
+                    opacity={0.3}
+                  />
+                  {/* Horizontal grid lines (0.1 unit spacing) */}
+                  <line
+                    x1={-1000000}
+                    y1={i * 0.1}
+                    x2={1000000}
+                    y2={i * 0.1}
+                    stroke="#555555"
+                    strokeWidth={0.02 / scale}
+                    strokeDasharray={`${0.1 / scale},${0.3 / scale}`}
+                    opacity={0.3}
+                  />
+                </React.Fragment>
+              ))}
+              
+              {/* Major grid lines (every 0.5 units) */}
+              {Array.from({ length: 60 }, (_, i) => i - 30).map(i => (
+                <React.Fragment key={`major-grid-${i}`}>
+                  {/* Vertical major grid lines */}
+                  <line
+                    x1={i * 0.5}
+                    y1={-1000000}
+                    x2={i * 0.5}
+                    y2={1000000}
+                    stroke="#666666"
+                    strokeWidth={0.05 / scale}
+                    strokeDasharray={`${0.2 / scale},${0.2 / scale}`}
+                    opacity={0.5}
+                  />
+                  {/* Horizontal major grid lines */}
+                  <line
+                    x1={-1000000}
+                    y1={i * 0.5}
+                    x2={1000000}
+                    y2={i * 0.5}
+                    stroke="#666666"
+                    strokeWidth={0.05 / scale}
+                    strokeDasharray={`${0.2 / scale},${0.2 / scale}`}
+                    opacity={0.5}
+                  />
+                </React.Fragment>
+              ))}
+            </g>
+          )}
+          
+          {/* Origin axes */}
+          <OriginAxes 
+            halfWidth={Math.max(boundingBox.width / 2, 100)} 
+            halfHeight={Math.max(boundingBox.height / 2, 100)} 
+            xAxisColor={rendererConfig.xAxisColor || '#ff5555'} 
+            yAxisColor={rendererConfig.yAxisColor || '#55ff55'} 
+            strokeWidth={1 / scale} // Adjust stroke width based on scale
+          />
+
+          {/* Render bounding box for debugging */}
+          {rendererConfig.showBoundingBox && (
+            <rect
+              x={boundingBox.minX}
+              y={boundingBox.minY}
+              width={boundingBox.width}
+              height={boundingBox.height}
+              fill="none"
+              stroke="#999"
+              strokeWidth={1 / scale}
+              strokeDasharray={`${5 / scale},${5 / scale}`}
+            />
+          )}
+
+          {/* Render entities */}
+          {displayEntities.map(entity => (
+            <DxfEntity
+              key={entity.handle}
+              entity={entity}
+              isSelected={selectedFeature?.entity.handle === entity.handle}
+              onClick={() => {
+                // Find layer and index information for the selected entity
+                let layerName = '';
+                let entityIndex = -1;
+                
+                // Search through the original data to find the layer and index
+                Object.entries(dxfData).forEach(([layer, layerEntities]) => {
+                  const idx = layerEntities.findIndex(e => e.handle === entity.handle);
+                  if (idx !== -1) {
+                    layerName = layer;
+                    entityIndex = idx;
+                  }
+                });
+                
+                if (layerName) {
+                  onFeatureSelect({
+                    layerName,
+                    entityType: entity.type,
+                    entityIndex,
+                    entity
+                  });
+                }
+              }}
+              rendererConfig={{
+                ...rendererConfig,
+                canvas: {
+                  ...rendererConfig.canvas,
+                  colors: {
+                    ...rendererConfig.canvas?.colors,
+                    default: '#ffffff',
+                    selection: '#ff9900',
+                    hover: '#ffcc00',
+                    background: '#2e2e2e'
+                  }
+                }
+              }}
+            />
+          ))}
+        </g>
+      </svg>
     </div>
   );
-}
+};
+
+export default Canvas;

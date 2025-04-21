@@ -1,113 +1,99 @@
-import { WheelHandlerOptions, WheelResult } from '../types';
-
 /**
- * Handle mouse wheel events for canvas zooming with special handling for MX Master 3S
- * and similar high-precision mice.
- * 
- * @param e The wheel event
- * @param currentZoom The current zoom level
- * @param options Configuration options
- * @returns WheelResult with the zoom change and direction
+ * Enhanced wheel handler for canvas zooming with better behavior
  */
-export function handleMouseWheel(
-  e: WheelEvent, 
-  currentZoom: number, 
-  options: WheelHandlerOptions
-): WheelResult | null {
-  // Default values
-  const {
-    zoomInFactor,
-    zoomOutFactor,
-    minZoom,
-    maxZoom,
-    defaultDirection = 'in',
-    zoomOutThreshold = 25,
-    zoomInThreshold = 5,
-    debug = false
-  } = options;
 
-  // MX Master 3S specific handling for more reliable zoom direction detection
-  // Check all available delta values for better direction detection
-  let deltaY = e.deltaY;
-  let deltaX = e.deltaX;
-  let wheelDirection = 0;
-  
-  // Also check deltaMode - some mice use line-based delta (1) or page-based delta (2)
-  const multiplier = e.deltaMode === 1 ? 20 : (e.deltaMode === 2 ? 100 : 1);
-  deltaY *= multiplier;
-  
-  // For MX Master, we'll REVERSE the default behavior:
-  // - Small/ambiguous movements will default to zoom IN (the more common desire)
-  // - Only very clearly downward movements will zoom OUT
-  
-  // Clear zoom OUT detection - must exceed higher threshold to zoom out
-  if (deltaY > zoomOutThreshold) {
-    wheelDirection = 1; // Zoom OUT - must be very clear downward movement
-  } 
-  // More sensitive zoom IN detection - lower threshold to zoom in
-  else if (deltaY < -zoomInThreshold) {
-    wheelDirection = -1; // Zoom IN - even slight upward movement
-  }
-  // For horizontal movement on MX Master
-  else if (Math.abs(deltaX) > 15) {
-    // For horizontal, we'll also bias toward zoom IN
-    wheelDirection = deltaX > 15 ? 1 : -1; // Bias toward zoom IN
-  }
-  // Default to zoom IN for small/ambiguous movements
-  else {
-    // When in doubt, use the configured default direction
-    wheelDirection = defaultDirection === 'out' ? 1 : -1;
-  }
-  
-  // Log debugging information if enabled
-  if (debug) {
-    console.log(`Wheel event: deltaY=${e.deltaY}, deltaX=${e.deltaX}, mode=${e.deltaMode}, dir=${wheelDirection}`);
-  }
-  
-  // Use EXACTLY one zoom step per wheel click
-  // No sensitivity factor - each click moves exactly one zoom level
-  const zoomChange = wheelDirection < 0 ? zoomInFactor : zoomOutFactor;
-  
-  // Calculate new zoom level with limits
-  const newZoom = Math.min(Math.max(currentZoom * zoomChange, minZoom), maxZoom);
-  
-  // Skip if zoom barely changed
-  if (Math.abs(newZoom - currentZoom) < 0.001) return null;
-  
-  return {
-    zoomChange,
-    wheelDirection,
-    newZoom
-  };
+interface WheelHandlerOptions {
+  event: React.WheelEvent<SVGSVGElement>;
+  currentScale: number;
+  currentOffset: { x: number; y: number };
+  minScale: number;
+  maxScale: number;
+  zoomFactor?: number;
+}
+
+interface WheelHandlerResult {
+  newScale: number;
+  newOffset: { x: number; y: number };
 }
 
 /**
- * Calculate new canvas offset based on zoom change
- * 
- * @param mx Mouse X position relative to container
- * @param my Mouse Y position relative to container 
- * @param currentOffset Current canvas offset
- * @param currentZoom Current zoom level
- * @param newZoom New zoom level
- * @returns New offset object {x, y}
+ * Process wheel events for zooming with proper focus point
  */
-export function calculateZoomOffset(
-  mx: number,
-  my: number,
-  currentOffset: { x: number; y: number },
-  currentZoom: number,
-  newZoom: number
-): { x: number; y: number } {
-  // Calculate the SVG coordinates under the cursor before zooming
-  // This creates a more natural zoom (centered on cursor)
-  const svgPoint = {
-    x: (mx - currentOffset.x) / currentZoom,
-    y: (my - currentOffset.y) / currentZoom
+export const handleWheel = ({
+  event,
+  currentScale,
+  currentOffset,
+  minScale = 0.1,
+  maxScale = 100,
+  zoomFactor = 0.1,
+}: WheelHandlerOptions): WheelHandlerResult => {
+  // Prevent default browser behavior
+  event.preventDefault();
+  
+  // Get mouse position relative to the SVG element
+  const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+  const mouseY = event.clientY - rect.top;
+  
+  // Calculate zoom direction and amount
+  const direction = event.deltaY > 0 ? -1 : 1;
+  const factor = direction > 0 ? (1 + zoomFactor) : (1 / (1 + zoomFactor));
+  
+  // Calculate new scale with limits
+  let newScale = currentScale * factor;
+  newScale = Math.max(minScale, Math.min(maxScale, newScale));
+  
+  // Calculate offset to zoom toward mouse position
+  const scaleDelta = newScale / currentScale;
+  
+  // Mouse position in SVG coordinates
+  const svgMouseX = mouseX - currentOffset.x;
+  const svgMouseY = mouseY - currentOffset.y;
+  
+  // Calculate new offset
+  const newOffset = {
+    x: currentOffset.x - svgMouseX * (scaleDelta - 1),
+    y: currentOffset.y - svgMouseY * (scaleDelta - 1)
   };
   
-  // Calculate new offset to keep the cursor over the same SVG point
+  return { newScale, newOffset };
+};
+
+/**
+ * Calculate appropriate initial scale to fit a bounding box
+ */
+export const calculateInitialScale = (
+  boundingBox: { width: number; height: number },
+  viewportWidth: number,
+  viewportHeight: number,
+  padding: number = 0.1
+): number => {
+  // Add padding
+  const paddedWidth = boundingBox.width * (1 + padding * 2);
+  const paddedHeight = boundingBox.height * (1 + padding * 2);
+  
+  // Calculate scale based on both dimensions
+  const scaleX = viewportWidth / paddedWidth;
+  const scaleY = viewportHeight / paddedHeight;
+  
+  // Use the smaller scale to ensure everything fits
+  return Math.min(scaleX, scaleY);
+};
+
+/**
+ * Calculate center offset for given bounding box and scale
+ */
+export const calculateCenterOffset = (
+  boundingBox: { 
+    centerX: number; 
+    centerY: number; 
+  },
+  viewportWidth: number,
+  viewportHeight: number,
+  scale: number
+): { x: number; y: number } => {
   return {
-    x: mx - svgPoint.x * newZoom,
-    y: my - svgPoint.y * newZoom
+    x: viewportWidth / 2 - boundingBox.centerX * scale,
+    y: viewportHeight / 2 + boundingBox.centerY * scale // Y is flipped in SVG
   };
-}
+};
