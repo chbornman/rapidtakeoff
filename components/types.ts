@@ -48,3 +48,111 @@ export interface SelectedFeature {
   entityIndex: number;
   entity: Entity;
 }
+
+/**
+ * Layer visibility state
+ */
+export interface LayerVisibility {
+  [layerName: string]: boolean;
+}
+
+/**
+ * Interface for DXF file data
+ */
+export interface DXFData {
+  [layerName: string]: Entity[];
+}
+
+/**
+ * Line entity
+ */
+export interface LineEntity extends Entity {
+  type: 'LINE';
+  start: number[];
+  end: number[];
+}
+
+/**
+ * Point entity
+ */
+export interface PointEntity extends Entity {
+  type: 'POINT';
+  location: number[];
+}
+
+/**
+ * Circle entity
+ */
+export interface CircleEntity extends Entity {
+  type: 'CIRCLE';
+  center: number[];
+  radius: number;
+}
+
+/**
+ * Arc entity
+ */
+export interface ArcEntity extends Entity {
+  type: 'ARC';
+  center: number[];
+  radius: number;
+  start_angle: number;
+  end_angle: number;
+}
+
+/**
+ * Ellipse entity
+ */
+export interface EllipseEntity extends Entity {
+  type: 'ELLIPSE';
+  center: number[];
+  major_axis: number[];
+  ratio: number;
+  start_param: number;
+  end_param: number;
+}
+
+/**
+ * Polyline entity
+ */
+export interface PolylineEntity extends Entity {
+  type: 'LWPOLYLINE' | 'POLYLINE';
+  points: number[][];
+  closed: boolean;
+  const_width?: number;
+}
+
+/**
+ * Spline entity
+ */
+export interface SplineEntity extends Entity {
+  type: 'SPLINE';
+  degree: number;
+  closed: boolean;
+  control_points: number[][];
+  knots?: number[];
+  weights?: number[];
+}
+
+/**
+ * Text entity
+ */
+export interface TextEntity extends Entity {
+  type: 'TEXT' | 'MTEXT';
+  text: string;
+  insert: number[];
+  height: number;
+  rotation: number;
+}
+
+/**
+ * Hatch entity
+ */
+export interface HatchEntity extends Entity {
+  type: 'HATCH';
+  pattern_name: string;
+  solid_fill: boolean;
+  pattern_scale: number;
+  pattern_angle: number;
+  paths: number;
+}

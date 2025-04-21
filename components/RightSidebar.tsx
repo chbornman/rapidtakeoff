@@ -1,13 +1,12 @@
 import React, { useState } from "react";
 import {
-  PencilIcon,
-  AdjustmentsHorizontalIcon,
-  CogIcon,
   InformationCircleIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  Square2StackIcon,
 } from "@heroicons/react/24/outline";
 import TabNavigator from "./TabNavigator";
+import LayerManager from "./LayerManager";
 import {
   colors,
   components,
@@ -15,9 +14,19 @@ import {
   spacing,
   sizes,
 } from "../styles/theme";
+import { DXFData, LayerVisibility } from "./types";
 
-export default function RightSidebar() {
+interface RightSidebarProps {
+  dxfData: DXFData | null;
+  onLayerVisibilityChange: (visibility: LayerVisibility) => void;
+}
+
+export default function RightSidebar({ 
+  dxfData, 
+  onLayerVisibilityChange 
+}: RightSidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  
   return (
     <div
       className="flex flex-col border-l h-full"
@@ -44,7 +53,7 @@ export default function RightSidebar() {
       </div>
       {!collapsed && (
         <TabNavigator
-          defaultActive="draw"
+          defaultActive="layers"
           iconClassName="h-5 w-5"
           classNameTabBar="flex items-center justify-center p-2 space-x-4 border-b"
           classNameActiveTab="text-white font-bold"
@@ -53,75 +62,16 @@ export default function RightSidebar() {
           classNameContent="p-4 flex-1 overflow-y-auto"
           tabs={[
             {
-              id: "draw",
-              icon: PencilIcon,
-              ariaLabel: "Draw",
+              id: "layers",
+              icon: Square2StackIcon,
+              ariaLabel: "Layers",
               content: (
                 <div>
-                  <h3 className="font-bold mb-2">Draw Tools</h3>
-                  <button
-                    className="flex items-center p-2 hover:bg-opacity-20 rounded mb-1 w-full"
-                    style={{
-                      // Use theme sidebar item background
-                      backgroundColor: components.sidebar.itemBackground,
-                    }}
-                  >
-                    <PencilIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-                    <span>Line</span>
-                  </button>
-                  <button
-                    className="flex items-center p-2 hover:bg-opacity-20 rounded w-full"
-                    style={{
-                      // Use theme sidebar item background
-                      backgroundColor: components.sidebar.itemBackground,
-                    }}
-                  >
-                    <PencilIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-                    <span>Circle</span>
-                  </button>
-                </div>
-              ),
-            },
-            {
-              id: "modify",
-              icon: AdjustmentsHorizontalIcon,
-              ariaLabel: "Modify",
-              content: (
-                <div>
-                  <h3 className="font-bold mb-2">Modify Tools</h3>
-                  <button
-                    className="flex items-center p-2 hover:bg-opacity-20 rounded mb-1 w-full"
-                    style={{ backgroundColor: "rgba(255,255,255,0.1)" }}
-                  >
-                    <AdjustmentsHorizontalIcon
-                      className="h-5 w-5 mr-2"
-                      aria-hidden="true"
-                    />
-                    <span>Move</span>
-                  </button>
-                  <button
-                    className="flex items-center p-2 hover:bg-opacity-20 rounded w-full"
-                    style={{ backgroundColor: "rgba(255,255,255,0.1)" }}
-                  >
-                    <AdjustmentsHorizontalIcon
-                      className="h-5 w-5 mr-2"
-                      aria-hidden="true"
-                    />
-                    <span>Rotate</span>
-                  </button>
-                </div>
-              ),
-            },
-            {
-              id: "settings",
-              icon: CogIcon,
-              ariaLabel: "Settings",
-              content: (
-                <div>
-                  <h3 className="font-bold mb-2">Settings</h3>
-                  <div className="text-white text-opacity-80">
-                    No settings available.
-                  </div>
+                  <h3 className="font-bold mb-2">Layer Controls</h3>
+                  <LayerManager 
+                    dxfData={dxfData} 
+                    onLayerVisibilityChange={onLayerVisibilityChange} 
+                  />
                 </div>
               ),
             },
@@ -131,9 +81,18 @@ export default function RightSidebar() {
               ariaLabel: "Info",
               content: (
                 <div>
-                  <h3 className="text-gray-700 font-bold mb-2">Information</h3>
-                  <div className="text-gray-600">Version 1.0.0</div>
-                  <div className="text-gray-600">Build date: 2025-04-20</div>
+                  <h3 className="text-gray-300 font-bold mb-2">Information</h3>
+                  <div className="text-gray-400">Version 1.0.0</div>
+                  <div className="text-gray-400">Build date: 2025-04-20</div>
+                  <div className="text-gray-400 mt-4">
+                    <h4 className="font-semibold mb-1">Controls:</h4>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Click on a feature to select it</li>
+                      <li>Use the layer toggles to show/hide layers</li>
+                      <li>Mouse wheel to zoom in/out</li>
+                      <li>Middle mouse button to pan the canvas</li>
+                    </ul>
+                  </div>
                 </div>
               ),
             },

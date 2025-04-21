@@ -74,13 +74,21 @@ export default function Canvas({
   const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const offsetStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Add styles for highlighting selected features (no hover effects)
+  // Add styles for hover effects and highlighting selected features
   useEffect(() => {
-    // Create a style element for our highlighting styles if it doesn't exist
-    if (!document.getElementById('svg-highlight-styles')) {
+    // Create a style element for our hover effects if it doesn't exist
+    if (!document.getElementById('svg-hover-styles')) {
       const styleEl = document.createElement('style');
-      styleEl.id = 'svg-highlight-styles';
-      styleEl.textContent = `        
+      styleEl.id = 'svg-hover-styles';
+      styleEl.textContent = `
+        svg path:hover, svg line:hover, svg circle:hover, 
+        svg rect:hover, svg polyline:hover, svg ellipse:hover,
+        svg polyline:hover, svg polygon:hover {
+          stroke-width: 2px !important;
+          cursor: pointer !important;
+          stroke-opacity: 0.8 !important;
+        }
+        
         .highlighted-feature {
           stroke: #FF0000 !important;
           stroke-width: 4px !important;
@@ -387,7 +395,127 @@ export default function Canvas({
     }
   };
 
-  // No handleElementClick - we've removed canvas click-to-select functionality
+  // Handle element click to select a feature
+  const handleElementClick = (e: React.MouseEvent) => {
+    // Don't process clicks if we're panning
+    if (isPanning) return;
+    
+    // Find the clicked SVG element
+    let target = e.target as Element;
+    
+    // Skip if we clicked the background or SVG container
+    if (!(target instanceof SVGElement) || 
+        target.tagName.toLowerCase() === 'svg' ||
+        target === svgWrapperRef.current) {
+      return;
+    }
+    
+    // If we clicked a generic group, try to find a better target
+    if (target.tagName.toLowerCase() === 'g') {
+      // Try to find first child element that's an actual shape
+      const firstShape = target.querySelector('path, line, circle, rect, ellipse, polyline, polygon');
+      if (firstShape) {
+        target = firstShape;
+      }
+    }
+    
+    // Get layer information
+    const layerGroup = target.closest('[data-layer]');
+    const layerName = layerGroup?.getAttribute('data-layer') || 'DEFAULT';
+    
+    // Get entity type - prefer data attribute, fall back to tag name
+    const entityType = target.getAttribute('data-entity-type') || 
+                      target.tagName.toUpperCase();
+    
+    // Find entity index within its type and layer
+    let entityIndex = 0;
+    let sameTypeElements: NodeListOf<Element>;
+    
+    if (layerGroup) {
+      // Find all elements of same type in this layer
+      sameTypeElements = layerGroup.querySelectorAll(
+        `[data-entity-type="${entityType}"], ${entityType.toLowerCase()}`
+      );
+    } else {
+      // Fallback: find all elements of same type in whole SVG
+      sameTypeElements = svgWrapperRef.current?.querySelectorAll(
+        `[data-entity-type="${entityType}"], ${entityType.toLowerCase()}`
+      ) || document.createDocumentFragment().querySelectorAll('*');
+    }
+    
+    entityIndex = Array.from(sameTypeElements).indexOf(target);
+    
+    // Skip if we couldn't determine the index
+    if (entityIndex === -1) return;
+    
+    // Create entity object with properties from SVG attributes
+    const entity: any = {
+      type: entityType,
+      handle: target.getAttribute('data-handle') || undefined,
+      layer: layerName
+    };
+    
+    // Add geometry properties based on element type
+    const tagName = target.tagName.toLowerCase();
+    
+    switch (tagName) {
+      case 'circle':
+        entity.center = [
+          parseFloat(target.getAttribute('cx') || '0'),
+          parseFloat(target.getAttribute('cy') || '0')
+        ];
+        entity.radius = parseFloat(target.getAttribute('r') || '0');
+        break;
+        
+      case 'line':
+        entity.start = [
+          parseFloat(target.getAttribute('x1') || '0'),
+          parseFloat(target.getAttribute('y1') || '0')
+        ];
+        entity.end = [
+          parseFloat(target.getAttribute('x2') || '0'),
+          parseFloat(target.getAttribute('y2') || '0')
+        ];
+        break;
+        
+      case 'rect':
+        entity.x = parseFloat(target.getAttribute('x') || '0');
+        entity.y = parseFloat(target.getAttribute('y') || '0');
+        entity.width = parseFloat(target.getAttribute('width') || '0');
+        entity.height = parseFloat(target.getAttribute('height') || '0');
+        break;
+        
+      case 'path':
+        entity.d = target.getAttribute('d') || '';
+        break;
+        
+      case 'polyline':
+      case 'polygon':
+        entity.points = target.getAttribute('points') || '';
+        break;
+    }
+    
+    // Notify about the selection
+    if (onFeatureSelect) {
+      // Create the selection object
+      const feature: SelectedFeature = {
+        layerName,
+        entityType,
+        entityIndex,
+        entity
+      };
+      
+      // If clicking the same element that's already selected, deselect it
+      if (selectedFeature && 
+          selectedFeature.layerName === layerName &&
+          selectedFeature.entityType === entityType &&
+          selectedFeature.entityIndex === entityIndex) {
+        onFeatureSelect(null);
+      } else {
+        onFeatureSelect(feature);
+      }
+    }
+  };
 
   return (
     <div
@@ -398,8 +526,9 @@ export default function Canvas({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onClick={handleElementClick}
       style={{
-        cursor: isPanning ? "grabbing" : "grab",
+        cursor: isPanning ? "grabbing" : "pointer",
         backgroundColor: themeComponents.canvas.backgroundColor,
         boxShadow: themeComponents.canvas.shadow
       }}

@@ -1,0 +1,83 @@
+{
+  "canvas": {
+    "zoom": {
+      "initial": 1,
+      "min": 0.1,
+      "max": 10,
+      "inFactor": 1.1,
+      "outFactor": 0.9
+    },
+    "colors": {
+      "background": "#1e1e1e",
+      "grid": "#333333",
+      "selection": "#ff0000",
+      "hover": "#4488ff",
+      "default": "#ffffff",
+      "boundingBox": "#00ff00"
+    },
+    "rendering": {
+      "thresholdForExtremeCoordinates": 5000,
+      "boundsScalingFactor": 3.0,
+      "boundsPadding": 0.05,
+      "preserveAspectRatio": true,
+      "minimumEntitySize": 10,
+      "minTextBoxSize": 50,
+      "textPadding": 0.5
+    },
+    "entity": {
+      "strokeWidth": {
+        "default": 1,
+        "selected": 2,
+        "hover": 1.5
+      },
+      "pointSize": {
+        "default": 2,
+        "selected": 4
+      },
+      "textSize": {
+        "scaleFactor": 10
+      }
+    },
+    "grid": {
+      "show": true,
+      "size": 10,
+      "snap": true
+    }
+  },
+  "entities": {
+    "line": {
+      "color": "#ffffff"
+    },
+    "circle": {
+      "color": "#ffffff",
+      "fill": "none"
+    },
+    "arc": {
+      "color": "#ffffff"
+    },
+    "point": {
+      "color": "#ffff00"
+    },
+    "polyline": {
+      "color": "#ffffff",
+      "fill": "none"
+    },
+    "text": {
+      "color": "#ffffff",
+      "fontFamily": "monospace"
+    },
+    "spline": {
+      "color": "#ffffff",
+      "fill": "none"
+    },
+    "ellipse": {
+      "color": "#ffffff",
+      "fill": "none"
+    },
+    "hatch": {
+      "outlineColor": "#ffffff",
+      "fillColor": "#888888",
+      "fillOpacity": 0.5
+    }
+  }
+}

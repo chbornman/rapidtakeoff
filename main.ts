@@ -18,6 +18,13 @@ function createWindow() {
     }
   });
 
+  // Enable logging from renderer process to main process console
+  win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
+    const prefix = levels[level] || 'LOG';
+    console.log(`[RENDERER ${prefix}] ${message}`);
+  });
+
   win.loadURL(startURL);
 }
 
@@ -31,17 +38,18 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// Add handler to get renderer config from JSON file
+// Add handler to get component renderer config from JSON file
 ipcMain.handle('get-renderer-config', async () => {
-  const configPath = path.join(__dirname, 'constants', 'renderer_config.json');
+  const configPath = path.join(__dirname, 'constants', 'component_renderer_config.json');
+  
   try {
     if (!fs.existsSync(configPath)) {
-      throw new Error(`Config file not found: ${configPath}`);
+      throw new Error(`Component renderer config file not found: ${configPath}`);
     }
     const configData = fs.readFileSync(configPath, 'utf8');
     return JSON.parse(configData);
   } catch (error) {
-    console.error('Error loading renderer config:', error);
+    console.error('Error loading component renderer config:', error);
     throw error; // Propagate error to renderer
   }
 });
@@ -94,53 +102,6 @@ ipcMain.handle('parse-dxf-tree', async (event, filePath) => {
         resolve(out);
       } else {
         reject(err || `parse_dxf.py exited with code ${code}`);
-      }
-    });
-  });
-});
-
-// IPC for rendering DXF to SVG via Python script
-ipcMain.handle('render-svg', async (event, filePath, config = {}) => {
-  const renderScript = path.join(__dirname, 'render_dxf_svg.py');
-  const { spawn, spawnSync } = require('child_process');
-  const fs = require('fs');
-  // Find a Python executable
-  const candidates = [];
-  const venvPy = path.join(__dirname, '.venv', 'bin', 'python3');
-  if (fs.existsSync(venvPy)) candidates.push(venvPy);
-  if (process.env.PYTHON) candidates.push(process.env.PYTHON);
-  candidates.push('/opt/homebrew/bin/python3', '/usr/local/bin/python3', 'python3', 'python');
-  let pythonCmd = null;
-  for (const cmd of candidates) {
-    try {
-      // Test import ezdxf
-      const check = spawnSync(cmd, ['-c', 'import ezdxf'], { stdio: 'ignore' });
-      if (check.status !== 0) continue;
-      // Verify CPython implementation
-      const impl = spawnSync(cmd, ['-c', 'import platform; print(platform.python_implementation())'], { stdio: ['ignore', 'pipe', 'ignore'] });
-      if (impl.status === 0 && impl.stdout.toString().trim() === 'CPython') {
-        pythonCmd = cmd;
-        break;
-      }
-    } catch {}
-  }
-  if (!pythonCmd) pythonCmd = candidates.find(Boolean);
-  return new Promise((resolve, reject) => {
-    // Render to SVG via Python Add-on with config
-    let out = '', err = '';
-    const configStr = JSON.stringify(config);
-    // Pass renderer configuration to Python script
-    const args = [renderScript, filePath, '--config', configStr];
-    console.log('Using renderer with config:', config)
-    
-    const proc = spawn(pythonCmd, args);
-    proc.stdout.on('data', d => out += d.toString());
-    proc.stderr.on('data', d => err += d.toString());
-    proc.on('close', code => {
-      if (code === 0) {
-        resolve(out);
-      } else {
-        reject(err || `render_dxf_svg.py exited with code ${code}`);
       }
     });
   });

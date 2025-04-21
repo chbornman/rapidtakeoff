@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import type { SVGRendererConfig, SelectedFeature } from "../components/types";
+import type { SelectedFeature, DXFData, LayerVisibility } from "../components/types";
 import LeftSidebar from "../components/LeftSidebar";
 import RightSidebar from "../components/RightSidebar";
 import Modal from "../components/Modal";
-import Canvas from "../components/Canvas";
+import DxfCanvas from "../components/DxfCanvas";
 import ResizablePanel from "../components/ResizablePanel";
+import DebugPanel from "../components/DebugPanel";
 import {
   colors,
   typography,
@@ -20,7 +21,6 @@ declare global {
   interface Window {
     electron: {
       openFileDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
-      renderSVG: (filePath: string, config: SVGRendererConfig) => Promise<string>;
       parseDXFTree: (filePath: string) => Promise<string>;
       getRendererConfig: () => Promise<any>;
     };
@@ -29,78 +29,67 @@ declare global {
 
 export default function Home() {
   const [showAccount, setShowAccount] = useState(false);
-  const [svgData, setSvgData] = useState<string | null>(null);
-  const [svgFilePath, setSvgFilePath] = useState<string | null>(null);
-  const [rendererConfig, setRendererConfig] = useState<SVGRendererConfig>({});
+  const [dxfFilePath, setDxfFilePath] = useState<string | null>(null);
+  const [dxfData, setDxfData] = useState<DXFData | null>(null);
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({});
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
-  
-  // Log the selected feature for debugging
-  useEffect(() => {
-    console.log("Index page selected feature:", selectedFeature);
-  }, [selectedFeature]);
-  
   const [configError, setConfigError] = useState<string | null>(null);
-
-  // Load config from JSON file without defaults
+  const [rendererConfig, setRendererConfig] = useState<any>({});
+  
+  // Load component-based renderer config from JSON file
   useEffect(() => {
     const loadConfig = async () => {
       try {
         const config = await window.electron.getRendererConfig();
-        if (config && config.DEFAULT_SVG_CONFIG) {
-          setRendererConfig(config.DEFAULT_SVG_CONFIG);
+        if (config) {
+          setRendererConfig(config);
           setConfigError(null);
         } else {
           setConfigError("Invalid configuration format");
         }
       } catch (error) {
-        console.error('Error loading renderer config:', error);
+        console.error('Error loading component renderer config:', error);
         setConfigError(`Configuration error: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
     loadConfig();
   }, []);
 
-  // handle selecting a new DXF file: render to SVG and store
+  // Log the selected feature for debugging
+  useEffect(() => {
+    console.log("Selected feature:", selectedFeature);
+  }, [selectedFeature]);
+
+  // Handle selecting a new DXF file: parse the DXF data
   const handleFileSelect = async (filePath: string) => {
-    setSvgFilePath(filePath);
+    setDxfFilePath(filePath);
+    
     try {
-      const svg = await window.electron.renderSVG(filePath, rendererConfig);
-      setSvgData(svg);
+      // Parse DXF tree data
+      const result = await window.electron.parseDXFTree(filePath);
+      const data = JSON.parse(result) as DXFData;
+      setDxfData(data);
+      
+      // Initialize layer visibility (all layers visible by default)
+      const initialVisibility = Object.keys(data).reduce<LayerVisibility>((acc, layerName) => {
+        acc[layerName] = true;
+        return acc;
+      }, {});
+      setLayerVisibility(initialVisibility);
+      
+      // Reset selected feature
+      setSelectedFeature(null);
     } catch (err) {
-      console.error("Failed to render SVG:", err);
+      console.error("Failed to parse DXF:", err);
+      setDxfData(null);
     }
   };
 
-  // reload current SVG content from DXF file with current renderer config
-  const reloadSvg = async () => {
-    if (!svgFilePath) return;
-    try {
-      const svg = await window.electron.renderSVG(svgFilePath, rendererConfig);
-      setSvgData(svg);
-    } catch (err) {
-      console.error("Failed to reload SVG:", err);
-    }
+  // Handle layer visibility changes
+  const handleLayerVisibilityChange = (visibility: LayerVisibility) => {
+    setLayerVisibility(visibility);
   };
 
-  // update renderer config and reload SVG
-  const updateRendererConfig = (newConfig: Partial<SVGRendererConfig>) => {
-    const updatedConfig = { ...rendererConfig, ...newConfig };
-    setRendererConfig(updatedConfig);
-
-    // Log config for debugging
-    console.warn("UI Config Update:", JSON.stringify(updatedConfig, null, 2));
-
-    // Reload SVG with new config if a file is loaded
-    if (svgFilePath) {
-      window.electron
-        .renderSVG(svgFilePath, updatedConfig)
-        .then((svg) => {
-          console.log("SVG updated with new config");
-          setSvgData(svg);
-        })
-        .catch((err) => console.error("Failed to update SVG rendering:", err));
-    }
-  };
   return (
     <div className="flex h-screen overflow-hidden">
       <ResizablePanel
@@ -112,7 +101,7 @@ export default function Home() {
         <LeftSidebar
           onAccount={() => setShowAccount(true)}
           onFileSelect={handleFileSelect}
-          filePath={svgFilePath}
+          filePath={dxfFilePath}
           onFeatureSelect={setSelectedFeature}
         />
       </ResizablePanel>
@@ -124,17 +113,16 @@ export default function Home() {
           <div className="text-red-500 p-4 bg-red-50 border border-red-200 rounded-md">
             <h3 className="font-bold mb-2">Configuration Error</h3>
             <p>{configError}</p>
-            <p className="mt-2 text-sm">Please ensure the renderer_config.json file exists and is valid.</p>
+            <p className="mt-2 text-sm">Please ensure the component_renderer_config.json file exists and is valid.</p>
           </div>
-        ) : svgData ? (
-          <Canvas
-            data={svgData}
-            rendererConfig={rendererConfig}
+        ) : (
+          <DxfCanvas
+            dxfData={dxfData}
+            layerVisibility={layerVisibility}
             selectedFeature={selectedFeature}
             onFeatureSelect={setSelectedFeature}
+            rendererConfig={rendererConfig}
           />
-        ) : (
-          <div className="text-gray-500 text-xl">CAD Canvas Placeholder</div>
         )}
       </div>
       <ResizablePanel
@@ -143,8 +131,14 @@ export default function Home() {
         maxWidth="400px"
         position="right"
       >
-        <RightSidebar />
+        <RightSidebar 
+          dxfData={dxfData}
+          onLayerVisibilityChange={handleLayerVisibilityChange}
+        />
       </ResizablePanel>
+
+      {/* Debug Panel for console logs */}
+      <DebugPanel maxLogs={50} />
 
       {showAccount && (
         <Modal onClose={() => setShowAccount(false)}>

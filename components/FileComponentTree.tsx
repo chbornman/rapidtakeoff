@@ -110,6 +110,38 @@ export default function FileComponentTree({
       .finally(() => setLoading(false));
   }, [filePath]);
   
+  // Get the filename early to avoid reference errors
+  const getFileName = React.useCallback(() => {
+    return filePath ? filePath.replace(/^.*[\\/]/, '') : 'DXF File';
+  }, [filePath]);
+  
+  // Ensure the tree path to a feature is open
+  const ensurePathToFeatureIsOpen = React.useCallback((layerName: string, entityType: string) => {
+    // Get the current filename
+    const currentFileName = getFileName();
+    
+    // Open the file node
+    const fileId = `${currentFileName}-`;
+    setOpenSections(prev => ({
+      ...prev,
+      [fileId]: true
+    }));
+    
+    // Open the layer node
+    const layerId = `${layerName}-`;
+    setOpenSections(prev => ({
+      ...prev,
+      [layerId]: true
+    }));
+    
+    // Open the entity type node
+    const typeId = `${entityType}-`;
+    setOpenSections(prev => ({
+      ...prev,
+      [typeId]: true
+    }));
+  }, [getFileName, setOpenSections]);
+  
   // Handle feature selection
   const handleFeatureSelect = React.useCallback((layerName: string, entityType: string, entityIndex: number, entity: Entity) => {
     const newSelectedFeature = {
@@ -119,8 +151,6 @@ export default function FileComponentTree({
       entity
     };
     
-    console.log("Selecting feature:", newSelectedFeature);
-    
     // If selecting the same feature again, deselect it
     if (selectedFeature &&
         selectedFeature.layerName === layerName && 
@@ -128,17 +158,27 @@ export default function FileComponentTree({
         selectedFeature.entityIndex === entityIndex) {
       setSelectedFeature(null);
       if (onFeatureSelect) {
-        console.log("Deselecting feature");
         onFeatureSelect(null);
       }
     } else {
       setSelectedFeature(newSelectedFeature);
       if (onFeatureSelect) {
-        console.log("Passing selection to parent:", newSelectedFeature);
         onFeatureSelect(newSelectedFeature);
       }
+      
+      // Auto-expand tree to show the selected feature
+      ensurePathToFeatureIsOpen(layerName, entityType);
     }
-  }, [selectedFeature, onFeatureSelect]);
+  }, [selectedFeature, onFeatureSelect, ensurePathToFeatureIsOpen]);
+  
+  // Handle external selection updates (when feature is selected from canvas)
+  React.useEffect(() => {
+    // Check if we have an incoming selection from props
+    if (onFeatureSelect && selectedFeature) {
+      // Ensure the tree is expanded to show the selected feature
+      ensurePathToFeatureIsOpen(selectedFeature.layerName, selectedFeature.entityType);
+    }
+  }, [selectedFeature, ensurePathToFeatureIsOpen]);
   
   // Handle toggling section open/close state
   const handleSectionToggle = React.useCallback((sectionId: string, isOpen: boolean) => {

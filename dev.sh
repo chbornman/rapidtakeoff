@@ -19,4 +19,6 @@ echo "Installing JS dependencies..."
 bun install
 
 echo "Starting development servers..."
-bun dev
+
+# Run with renderer process logs enabled
+ELECTRON_ENABLE_LOGGING=1 bun dev
