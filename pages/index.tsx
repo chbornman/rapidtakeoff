@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import type { SVGRendererConfig } from "../components/types";
+import type { SVGRendererConfig, SelectedFeature } from "../components/types";
 import LeftSidebar from "../components/LeftSidebar";
 import RightSidebar from "../components/RightSidebar";
 import Modal from "../components/Modal";
@@ -32,6 +32,12 @@ export default function Home() {
   const [svgData, setSvgData] = useState<string | null>(null);
   const [svgFilePath, setSvgFilePath] = useState<string | null>(null);
   const [rendererConfig, setRendererConfig] = useState<SVGRendererConfig>({});
+  const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
+  
+  // Log the selected feature for debugging
+  useEffect(() => {
+    console.log("Index page selected feature:", selectedFeature);
+  }, [selectedFeature]);
   
   const [configError, setConfigError] = useState<string | null>(null);
 
@@ -107,6 +113,7 @@ export default function Home() {
           onAccount={() => setShowAccount(true)}
           onFileSelect={handleFileSelect}
           filePath={svgFilePath}
+          onFeatureSelect={setSelectedFeature}
         />
       </ResizablePanel>
       <div
@@ -123,6 +130,8 @@ export default function Home() {
           <Canvas
             data={svgData}
             rendererConfig={rendererConfig}
+            selectedFeature={selectedFeature}
+            onFeatureSelect={setSelectedFeature}
           />
         ) : (
           <div className="text-gray-500 text-xl">CAD Canvas Placeholder</div>

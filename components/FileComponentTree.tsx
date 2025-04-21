@@ -1,20 +1,94 @@
 import React from 'react';
 import { ChevronRight, ChevronDown, Layers, FileText, Code, Cube, Box } from 'react-feather';
-
-// Entity structure for DXF components
-interface Entity {
-  type: string;
-  [key: string]: any;
-}
+import { Entity, SelectedFeature } from './types';
 
 interface FileComponentTreeProps {
   filePath: string | null;
+  onFeatureSelect?: (feature: SelectedFeature | null) => void;
 }
 
-export default function FileComponentTree({ filePath }: FileComponentTreeProps) {
+// Define the custom details component outside the main component
+const TreeDetail = ({ 
+  title, 
+  count, 
+  icon: Icon, 
+  isOpen = false, 
+  className = "", 
+  children,
+  onClick,
+  onToggle,
+  openState
+}: { 
+  title: string; 
+  count?: number; 
+  icon?: React.ElementType;
+  isOpen?: boolean;
+  className?: string;
+  children: React.ReactNode;
+  onClick?: () => void;
+  onToggle?: (id: string, isOpen: boolean) => void;
+  openState?: boolean;
+}) => {
+  // Create a stable ID for this section
+  const sectionId = React.useMemo(() => `${title}-${count ?? ''}`, [title, count]);
+  
+  // Use controlled open state if provided, otherwise use internal state
+  const [internalOpen, setInternalOpen] = React.useState(isOpen);
+  const open = openState !== undefined ? openState : internalOpen;
+  
+  // Handle toggle
+  const handleToggle = React.useCallback(() => {
+    if (onToggle) {
+      onToggle(sectionId, !open);
+    } else {
+      setInternalOpen(!open);
+    }
+  }, [open, sectionId, onToggle]);
+  
+  return (
+    <div className={`mb-1 ${className}`}>
+      <div className="flex items-center justify-between">
+        <div 
+          className={`flex flex-grow items-center p-1 rounded-md transition-colors duration-200 cursor-pointer
+            ${open ? 'bg-opacity-20 bg-white' : 'hover:bg-opacity-10 hover:bg-white'}`}
+          onClick={handleToggle}
+        >
+          {open ? <ChevronDown size={12} className="mr-1 flex-shrink-0" /> : <ChevronRight size={12} className="mr-1 flex-shrink-0" />}
+          {Icon && <Icon size={12} className="mr-1 flex-shrink-0" />}
+          <span className="font-medium truncate">{title}</span>
+          {count !== undefined && (
+            <span className="ml-1 text-xs bg-opacity-30 bg-white px-1.5 py-0 rounded-full">
+              {count}
+            </span>
+          )}
+        </div>
+        {onClick && (
+          <button 
+            className={`ml-1 px-1.5 py-0.5 text-xs rounded ${className.includes('border-red-500') ? 'bg-red-700 hover:bg-red-600' : 'bg-gray-700 hover:bg-gray-600'} text-white`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick();
+            }}
+          >
+            {className.includes('border-red-500') ? 'X' : '✓'}
+          </button>
+        )}
+      </div>
+      {open && <div className="ml-4 mt-0.5">{children}</div>}
+    </div>
+  );
+};
+
+export default function FileComponentTree({ 
+  filePath, 
+  onFeatureSelect 
+}: FileComponentTreeProps) {
   const [treeData, setTreeData] = React.useState<Record<string, Entity[]>>({});
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [selectedFeature, setSelectedFeature] = React.useState<SelectedFeature | null>(null);
+  // State to track which sections have been manually opened
+  const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({});
 
   React.useEffect(() => {
     if (!filePath) return;
@@ -35,7 +109,51 @@ export default function FileComponentTree({ filePath }: FileComponentTreeProps) 
       })
       .finally(() => setLoading(false));
   }, [filePath]);
+  
+  // Handle feature selection
+  const handleFeatureSelect = React.useCallback((layerName: string, entityType: string, entityIndex: number, entity: Entity) => {
+    const newSelectedFeature = {
+      layerName,
+      entityType,
+      entityIndex,
+      entity
+    };
+    
+    console.log("Selecting feature:", newSelectedFeature);
+    
+    // If selecting the same feature again, deselect it
+    if (selectedFeature &&
+        selectedFeature.layerName === layerName && 
+        selectedFeature.entityType === entityType && 
+        selectedFeature.entityIndex === entityIndex) {
+      setSelectedFeature(null);
+      if (onFeatureSelect) {
+        console.log("Deselecting feature");
+        onFeatureSelect(null);
+      }
+    } else {
+      setSelectedFeature(newSelectedFeature);
+      if (onFeatureSelect) {
+        console.log("Passing selection to parent:", newSelectedFeature);
+        onFeatureSelect(newSelectedFeature);
+      }
+    }
+  }, [selectedFeature, onFeatureSelect]);
+  
+  // Handle toggling section open/close state
+  const handleSectionToggle = React.useCallback((sectionId: string, isOpen: boolean) => {
+    setOpenSections(prev => ({
+      ...prev,
+      [sectionId]: isOpen
+    }));
+  }, []);
+  
+  // Helper to check if a section is open
+  const isSectionOpen = React.useCallback((sectionId: string) => {
+    return openSections[sectionId] || false;
+  }, [openSections]);
 
+  // Conditional rendering based on loading/error states
   if (!filePath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400 p-4">
@@ -44,6 +162,7 @@ export default function FileComponentTree({ filePath }: FileComponentTreeProps) 
       </div>
     );
   }
+  
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400 p-4">
@@ -57,6 +176,7 @@ export default function FileComponentTree({ filePath }: FileComponentTreeProps) 
       </div>
     );
   }
+  
   if (error) {
     return (
       <div className="text-red-400 p-4 bg-red-900 bg-opacity-20 rounded-md m-2 border border-red-800">
@@ -76,8 +196,10 @@ export default function FileComponentTree({ filePath }: FileComponentTreeProps) 
       </div>
     );
   }
+  
   // Derive filename from path for top-level dropdown
   const fileName = filePath ? filePath.replace(/^.*[\\/]/, '') : 'DXF File';
+  
   // Helper to group entities by type
   const groupByType = (entities: Entity[]): Record<string, Entity[]> =>
     entities.reduce((acc, ent) => {
@@ -85,94 +207,96 @@ export default function FileComponentTree({ filePath }: FileComponentTreeProps) 
       (acc[t] = acc[t] || []).push(ent);
       return acc;
     }, {} as Record<string, Entity[]>);
-  // Custom details summary component for consistent styling
-  const CustomDetails = ({ 
-    title, 
-    count, 
-    icon: Icon, 
-    isOpen = false, 
-    className = "", 
-    children 
-  }: { 
-    title: string; 
-    count?: number; 
-    icon?: React.ElementType;
-    isOpen?: boolean;
-    className?: string;
-    children: React.ReactNode;
-  }) => {
-    const [open, setOpen] = React.useState(isOpen);
-    
-    return (
-      <div className={`mb-2 ${className}`}>
-        <div 
-          className={`flex items-center p-2 rounded-md transition-colors duration-200 cursor-pointer
-            ${open ? 'bg-opacity-20 bg-white' : 'hover:bg-opacity-10 hover:bg-white'}`}
-          onClick={() => setOpen(!open)}
-        >
-          {open ? <ChevronDown size={16} className="mr-1 flex-shrink-0" /> : <ChevronRight size={16} className="mr-1 flex-shrink-0" />}
-          {Icon && <Icon size={16} className="mr-2 flex-shrink-0" />}
-          <span className="font-medium">{title}</span>
-          {count !== undefined && (
-            <span className="ml-2 text-xs bg-opacity-30 bg-white px-2 py-0.5 rounded-full">
-              {count}
-            </span>
-          )}
-        </div>
-        {open && <div className="ml-6 mt-1">{children}</div>}
-      </div>
-    );
-  };
 
   return (
-    <div className="text-sm text-gray-200 overflow-auto p-2">
-      <CustomDetails 
+    <div className="text-xs text-gray-200 overflow-auto p-0">
+      <TreeDetail 
         title={fileName} 
         icon={FileText} 
-        isOpen={true}
+        isOpen={false}
+        onToggle={handleSectionToggle}
+        openState={isSectionOpen(`${fileName}-`)}
       >
         {layers.map(([layer, entities]) => {
           const typesMap = groupByType(entities);
+          const layerId = `${layer}-${entities.length}`;
           
           return (
-            <CustomDetails 
+            <TreeDetail 
               key={layer} 
               title={layer} 
               count={entities.length} 
               icon={Layers}
+              isOpen={false}
+              onToggle={handleSectionToggle}
+              openState={isSectionOpen(layerId)}
             >
-              {Object.entries(typesMap).map(([type, ents]) => (
-                <CustomDetails 
-                  key={type} 
-                  title={type} 
-                  count={ents.length} 
-                  icon={Code}
-                >
-                  <div className="space-y-2">
-                    {ents.map((entity, idx) => (
-                      <CustomDetails 
-                        key={idx} 
-                        title={`Feature ${idx + 1}`} 
-                        icon={Cube}
-                        className="border-l border-gray-700 pl-2"
-                      >
-                        <div className="bg-opacity-10 bg-white rounded-md p-2 text-xs space-y-1.5">
-                          {Object.entries(entity).map(([k, v]) => (
-                            <div key={k} className="flex">
-                              <span className="font-semibold text-gray-300 min-w-20">{k}</span>
-                              <span className="font-mono text-gray-400 ml-2 overflow-hidden text-ellipsis">{JSON.stringify(v)}</span>
+              {Object.entries(typesMap).map(([type, ents]) => {
+                const typeId = `${type}-${ents.length}`;
+                
+                return (
+                  <TreeDetail 
+                    key={type} 
+                    title={type} 
+                    count={ents.length} 
+                    icon={Code}
+                    isOpen={false}
+                    onToggle={handleSectionToggle}
+                    openState={isSectionOpen(typeId)}
+                  >
+                    <div className="space-y-2">
+                      {ents.map((entity, idx) => {
+                        const isSelected = selectedFeature && 
+                          selectedFeature.layerName === layer &&
+                          selectedFeature.entityType === type &&
+                          selectedFeature.entityIndex === idx;
+                        
+                        const featureId = `Feature ${idx + 1}-`;
+                        
+                        return (
+                          <TreeDetail 
+                            key={idx} 
+                            title={`Feature ${idx + 1}`} 
+                            icon={Cube}
+                            isOpen={false}
+                            className={`border-l ${isSelected ? 'border-red-500' : 'border-gray-700'} pl-2`}
+                            onClick={() => handleFeatureSelect(layer, type, idx, entity)}
+                            onToggle={handleSectionToggle}
+                            openState={isSectionOpen(featureId)}
+                          >
+                            <div 
+                              className={`${isSelected ? 'bg-red-900 bg-opacity-20' : 'bg-white bg-opacity-10'} rounded-md p-2 text-xs space-y-1.5 cursor-pointer`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleFeatureSelect(layer, type, idx, entity);
+                              }}
+                            >
+                              <div className="flex justify-between mb-2">
+                                <span className={`${isSelected ? 'text-red-400' : 'text-gray-400'} text-sm font-medium`}>
+                                  {isSelected ? 'Selected' : 'Properties'}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {isSelected ? 'Click to deselect' : 'Click to select'}
+                                </span>
+                              </div>
+                              {Object.entries(entity).map(([k, v]) => (
+                                <div key={k} className="flex">
+                                  <span className="font-semibold text-gray-300 min-w-20">{k}</span>
+                                  <span className="font-mono text-gray-400 ml-2 overflow-hidden text-ellipsis">{JSON.stringify(v)}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      </CustomDetails>
-                    ))}
-                  </div>
-                </CustomDetails>
-              ))}
-            </CustomDetails>
+                          </TreeDetail>
+                        );
+                      })}
+                    </div>
+                  </TreeDetail>
+                );
+              })}
+            </TreeDetail>
           );
         })}
-      </CustomDetails>
+      </TreeDetail>
     </div>
   );
 }

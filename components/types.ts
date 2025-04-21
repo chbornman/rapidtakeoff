@@ -27,3 +27,24 @@ export interface SVGRendererConfig {
   text_policy?: "FILLING" | "OUTLINE" | "REPLACE_RECT" | "REPLACE_FILL" | "IGNORE";
   image_policy?: "DISPLAY" | "RECT" | "MISSING" | "PROXY" | "IGNORE";
 }
+
+/**
+ * Interface for DXF entity data
+ */
+export interface Entity {
+  type: string;
+  handle?: string;
+  layer?: string;
+  id?: string;
+  [key: string]: any;
+}
+
+/**
+ * Interface for selected entity data
+ */
+export interface SelectedFeature {
+  layerName: string;
+  entityType: string;
+  entityIndex: number;
+  entity: Entity;
+}
