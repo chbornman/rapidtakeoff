@@ -54,8 +54,14 @@
     "line": {
       "color": "#ffffff",
       "parameters": {
-        "start": [0, 0],
-        "end": [10, 10],
+        "start": [
+          0,
+          0
+        ],
+        "end": [
+          10,
+          10
+        ],
         "handle": "",
         "layer": "0",
         "rgb": ""
@@ -65,16 +71,22 @@
       "color": "#ffffff",
       "fill": "none",
       "parameters": {
-        "center": [0, 0],
-        "radius": 5,
+        "center": [
+          0,
+          0
+        ],
+        "radius": 1,
         "handle": "",
         "layer": "0"
       }
     },
     "arc": {
-      "color": "#ffffff",
+      "color": "#44FF44",
       "parameters": {
-        "center": [0, 0],
+        "center": [
+          0,
+          0
+        ],
         "radius": 5,
         "start_angle": 0,
         "end_angle": 90,
@@ -85,7 +97,10 @@
     "point": {
       "color": "#ffff00",
       "parameters": {
-        "location": [0, 0],
+        "location": [
+          0,
+          0
+        ],
         "handle": "",
         "layer": "0"
       }
@@ -94,7 +109,24 @@
       "color": "#ffffff",
       "fill": "none",
       "parameters": {
-        "points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ],
         "closed": false,
         "const_width": 0,
         "handle": "",
@@ -106,7 +138,10 @@
       "fontFamily": "monospace",
       "parameters": {
         "text": "Sample Text",
-        "insert": [0, 0],
+        "insert": [
+          0,
+          0
+        ],
         "height": 1,
         "rotation": 0,
         "handle": "",
@@ -117,11 +152,35 @@
       "color": "#ffffff",
       "fill": "none",
       "parameters": {
-        "control_points": [[0, 0], [5, 15], [10, 0]],
+        "control_points": [
+          [
+            0,
+            0
+          ],
+          [
+            5,
+            15
+          ],
+          [
+            10,
+            0
+          ]
+        ],
         "closed": false,
         "degree": 2,
-        "knots": [0, 0, 0, 1, 1, 1],
-        "weights": [1, 1, 1],
+        "knots": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "weights": [
+          1,
+          1,
+          1
+        ],
         "handle": "",
         "layer": "0"
       }
@@ -130,8 +189,14 @@
       "color": "#ffffff",
       "fill": "none",
       "parameters": {
-        "center": [0, 0],
-        "major_axis": [5, 0],
+        "center": [
+          0,
+          0
+        ],
+        "major_axis": [
+          5,
+          0
+        ],
         "ratio": 0.5,
         "start_param": 0,
         "end_param": 6.28318530718,
@@ -157,7 +222,24 @@
       "color": "#ffffff",
       "fill": "none",
       "parameters": {
-        "points": [[0, 0], [10, 0], [10, 10], [0, 10]],
+        "points": [
+          [
+            0,
+            0
+          ],
+          [
+            10,
+            0
+          ],
+          [
+            10,
+            10
+          ],
+          [
+            0,
+            10
+          ]
+        ],
         "closed": false,
         "const_width": 0,
         "handle": "",
@@ -169,7 +251,10 @@
       "fontFamily": "monospace",
       "parameters": {
         "text": "Sample Text",
-        "insert": [0, 0],
+        "insert": [
+          0,
+          0
+        ],
         "height": 1,
         "rotation": 0,
         "handle": "",
@@ -186,17 +271,17 @@
     "line_policy": "ACCURATE",
     "hatch_policy": "NORMAL",
     "infinite_line_length": 20,
-    "lineweight_scaling": 1.0,
-    "min_lineweight": 150.0,
+    "lineweight_scaling": 1,
+    "min_lineweight": 300,
     "min_dash_length": 0.1,
     "max_flattening_distance": 0.1,
     "circle_approximation_count": 128,
     "hatching_timeout": 30.0,
     "min_hatch_line_distance": 0.0001,
     "color_policy": "COLOR",
-    "custom_fg_color": "#000000",
+    "custom_fg_color": "#00FFF0",
     "background_policy": "DEFAULT",
-    "custom_bg_color": "#ffffff",
+    "custom_bg_color": "#fff00f",
     "lineweight_policy": "ABSOLUTE",
     "text_policy": "FILLING",
     "image_policy": "DISPLAY"

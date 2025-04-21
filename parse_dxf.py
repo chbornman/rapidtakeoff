@@ -80,6 +80,23 @@ def parse_dxf(filepath: str, config: Optional[Dict[str, Any]] = None) -> Dict[st
         svg_config = config.get('svg', {}) if isinstance(config, dict) else {}
         if svg_config:
             sys.stderr.write(f'[PYTHON] Found SVG config section with {len(svg_config)} parameters\n')
+            
+            # If we're using render context for visualization properties, 
+            # we can apply SVG config parameters here
+            # This would affect things like colors, line weights, etc.
+            try:
+                # Some parameters might need to be mapped from our config to ezdxf's format
+                # For example: map to visualization configuration settings
+                config_mapping = {
+                    'lineweight_scaling': 'lineweight_scaling',
+                    'min_lineweight': 'min_lineweight',
+                    'circle_approximation_count': 'circle_approximation_count',
+                    # Add more mappings as needed
+                }
+                
+                sys.stderr.write(f'[PYTHON] Would apply these SVG rendering params: {list(svg_config.keys())}\n')
+            except Exception as e:
+                sys.stderr.write(f'[PYTHON] Error applying SVG config: {e}\n')
     
     try:
         sys.stderr.write('[PYTHON] Reading DXF file with ezdxf\n')

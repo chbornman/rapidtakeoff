@@ -119,6 +119,97 @@ ipcMain.handle('open-file-dialog', async () => {
 
 // Cache for running DXF parse operations
 const parseOperations = new Map();
+const renderOperations = new Map();
+
+// IPC for rendering DXF to SVG
+ipcMain.handle('render-svg', async (event, filePath, config = null) => {
+  console.log(`[MAIN] Rendering SVG for DXF file: ${filePath}`);
+  
+  // Check if we're already rendering this file with same config
+  const operationKey = `${filePath}-${JSON.stringify(config)}`;
+  if (renderOperations.has(operationKey)) {
+    console.log(`[MAIN] Already rendering this file with same config, returning existing promise`);
+    return renderOperations.get(operationKey);
+  }
+  
+  // Custom configuration - extract SVG parameters if it exists
+  let effectiveConfig = config;
+  if (config && typeof config === 'object') {
+    // If there's a dedicated svg section in the config, use only that for render_dxf_svg.py
+    if (config.svg) {
+      console.log(`[MAIN] Using dedicated SVG config section with ${Object.keys(config.svg).length} parameters`);
+      effectiveConfig = config.svg;
+    }
+  }
+  
+  const renderScript = path.join(__dirname, 'render_dxf_svg.py');
+  const { spawn } = require('child_process');
+  
+  // Find a Python executable with ezdxf
+  console.log('[MAIN] Finding Python executable with ezdxf for SVG rendering');
+  const pythonCmd = findPythonExecutable();
+  if (!pythonCmd) {
+    console.error('[MAIN] No Python executable found with ezdxf module');
+    throw new Error('Python executable not found for DXF rendering. Please make sure Python 3 with ezdxf is installed.');
+  }
+  console.log(`[MAIN] Found Python executable: ${pythonCmd}`);
+  
+  // Build command arguments
+  const args = [renderScript, filePath];
+  
+  // Add config if provided
+  if (effectiveConfig) {
+    console.log('[MAIN] Adding SVG config to Python args');
+    args.push('--config', JSON.stringify(effectiveConfig));
+  }
+  
+  console.log(`[MAIN] Running: ${pythonCmd} ${args.join(' ')}`);
+  
+  const renderPromise = new Promise((resolve, reject) => {
+    let out = '', err = '';
+    const proc = spawn(pythonCmd, args);
+    console.log(`[MAIN] Python SVG rendering process spawned with PID: ${proc.pid}`);
+    
+    proc.stdout.on('data', d => {
+      const chunk = d.toString();
+      console.log(`[MAIN] Received ${chunk.length} bytes from Python SVG renderer stdout`);
+      out += chunk;
+    });
+    
+    proc.stderr.on('data', d => {
+      const errorMsg = d.toString();
+      err += errorMsg;
+      console.error(`[MAIN] SVG rendering error: ${errorMsg}`);
+    });
+    
+    proc.on('close', code => {
+      console.log(`[MAIN] Python SVG process exited with code: ${code}`);
+      // Remove from operations map when done
+      renderOperations.delete(operationKey);
+      
+      if (code === 0) {
+        console.log('[MAIN] Successfully rendered SVG');
+        resolve(out);
+      } else {
+        console.error(`[MAIN] Python SVG process failed with code ${code}`);
+        reject(err || `render_dxf_svg.py exited with code ${code}`);
+      }
+    });
+    
+    // Handle process errors
+    proc.on('error', (err) => {
+      console.error(`[MAIN] Failed to start Python SVG process: ${err.message}`);
+      // Remove from operations map on error
+      renderOperations.delete(operationKey);
+      reject(`Failed to start Python SVG process: ${err.message}`);
+    });
+  });
+  
+  // Store the promise in the operations map
+  renderOperations.set(operationKey, renderPromise);
+  
+  return renderPromise;
+});
 
 // IPC for parsing DXF via Python script
 
@@ -174,7 +265,8 @@ ipcMain.handle('parse-dxf-tree', async (event, filePath, config = null) => {
     return parseOperations.get(operationKey);
   }
   
-  console.log('[MAIN] DXF parsing config:', config);
+  // We now pass the entire config object, which includes the SVG section
+  console.log('[MAIN] DXF parsing with config, contains SVG section:', config && config.svg ? 'Yes' : 'No');
   
   const parseScript = path.join(__dirname, 'parse_dxf.py');
   const { spawn } = require('child_process');

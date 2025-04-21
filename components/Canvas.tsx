@@ -71,6 +71,25 @@ const Canvas: React.FC<CanvasProps> = ({
     };
   }, []);
 
+  // Track first load to determine whether we should reset view
+  const isFirstLoad = useRef(true);
+  const prevDxfPathRef = useRef<string | null>(null);
+  
+  // Handle file changes - reset first load flag when DXF file path changes
+  useEffect(() => {
+    if (dxfData) {
+      // Check if this is a new file by examining one of the entities for a unique identifier
+      // This approach avoids directly comparing entity counts which could be affected by filtering
+      const firstEntityHandle = Object.values(dxfData)[0]?.[0]?.handle;
+      
+      if (firstEntityHandle && firstEntityHandle !== prevDxfPathRef.current) {
+        console.log('[CANVAS] New DXF file detected - will reset view on next render');
+        isFirstLoad.current = true;
+        prevDxfPathRef.current = firstEntityHandle;
+      }
+    }
+  }, [dxfData]);
+  
   // Prepare flat list of entities from DXF data with IDs
   const entities = React.useMemo(() => {
     if (!dxfData) return [];
@@ -245,16 +264,26 @@ const Canvas: React.FC<CanvasProps> = ({
       newScale *= rendererConfig.initialScaleFactor;
     }
     
-    // Always center on origin (0,0) instead of the bounding box center
-    setScale(newScale);
-    
-    // Since we modified the SVG transform to always center (0,0) at the canvas center,
-    // we reset the offset to (0,0) when a file is loaded
-    // This ensures the DXF origin (0,0) is always centered in the canvas
-    setOffset({ 
-      x: 0,
-      y: 0
-    });
+    // Only reset view (scale and offset) on first load, not on config changes
+    if (isFirstLoad.current) {
+      console.log('[CANVAS] First load - resetting view');
+      // Always center on origin (0,0) instead of the bounding box center
+      setScale(newScale);
+      
+      // Since we modified the SVG transform to always center (0,0) at the canvas center,
+      // we reset the offset to (0,0) when a file is loaded
+      // This ensures the DXF origin (0,0) is always centered in the canvas
+      setOffset({ 
+        x: 0,
+        y: 0
+      });
+      
+      // Mark as no longer the first load
+      isFirstLoad.current = false;
+    } else {
+      console.log('[CANVAS] Config change - preserving current view');
+      // Keep current scale and offset
+    }
   }, [entities, canvasSize.width, canvasSize.height]);
 
   // Mouse wheel zoom handler
