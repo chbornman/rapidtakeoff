@@ -18,8 +18,6 @@ interface LeftSidebarProps {
   onFeatureSelect?: (feature: SelectedFeature | null) => void;
   /** Callback to change layer visibility, integrated into component tree */
   onLayerVisibilityChange: (visibility: LayerVisibility) => void;
-  /** Callback to change component visibility state */
-  onComponentVisibilityChange: (visibility: Record<string, Record<string, boolean>>) => void;
   /** Close the currently open DXF file */
   onFileClose: () => void;
 }
@@ -30,7 +28,6 @@ export default function LeftSidebar({
   filePath,
   onFeatureSelect,
   onLayerVisibilityChange,
-  onComponentVisibilityChange,
   onFileClose,
 }: LeftSidebarProps) {
   // open file dialog and render DXF to SVG
@@ -78,7 +75,6 @@ export default function LeftSidebar({
                     filePath={filePath}
                     onFeatureSelect={onFeatureSelect}
                     onLayerVisibilityChange={onLayerVisibilityChange}
-                    onComponentVisibilityChange={onComponentVisibilityChange}
                   />
                 </div>
               ),

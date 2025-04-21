@@ -27,94 +27,34 @@ const OriginAxes: React.FC<OriginAxesProps> = ({
   
   return (
     <>
-      {/* X Axis (horizontal) */}
+      {/* X Axis (horizontal) - simple line */}
       <line
         x1={-INFINITE_EXTENT}
         y1={0}
         x2={INFINITE_EXTENT}
         y2={0}
         stroke={xAxisColor}
-        strokeWidth={strokeWidth * 1.5}
+        strokeWidth={strokeWidth * 1.0}
       />
       
-      {/* Add tick marks along X axis (scaled down by 10x) */}
-      {[-5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map(tick => (
-        <line
-          key={`x-tick-${tick}`}
-          x1={tick}
-          y1={-0.1/strokeWidth}
-          x2={tick}
-          y2={0.1/strokeWidth}
-          stroke={xAxisColor}
-          strokeWidth={strokeWidth}
-        />
-      ))}
-      
-      {/* X axis arrow */}
-      <polygon 
-        points={`${5 + 0.3/strokeWidth},0 ${5},${-0.15/strokeWidth} ${5},${0.15/strokeWidth}`} 
-        fill={xAxisColor}
-      />
-      
-      {/* X axis label */}
-      <text 
-        x={5 + 0.3/strokeWidth} 
-        y={0.1/strokeWidth} 
-        fill={xAxisColor} 
-        fontSize={0.2/strokeWidth} 
-        style={{ transform: `scale(${strokeWidth}, ${strokeWidth})` }}
-      >
-        X
-      </text>
-      
-      {/* Y Axis (vertical) */}
+      {/* Y Axis (vertical) - simple line */}
       <line
         x1={0}
         y1={-INFINITE_EXTENT}
         x2={0}
         y2={INFINITE_EXTENT}
         stroke={yAxisColor}
-        strokeWidth={strokeWidth * 1.5}
+        strokeWidth={strokeWidth * 1.0}
       />
       
-      {/* Add tick marks along Y axis (scaled down by 10x) */}
-      {[-5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map(tick => (
-        <line
-          key={`y-tick-${tick}`}
-          x1={-0.1/strokeWidth}
-          y1={tick}
-          x2={0.1/strokeWidth}
-          y2={tick}
-          stroke={yAxisColor}
-          strokeWidth={strokeWidth}
-        />
-      ))}
-      
-      {/* Y axis arrow (pointing up with the standard coordinate system) */}
-      <polygon 
-        points={`0,${5 + 0.3/strokeWidth} ${-0.15/strokeWidth},${5} ${0.15/strokeWidth},${5}`} 
-        fill={yAxisColor}
-      />
-      
-      {/* Y axis label */}
-      <text 
-        x={0.1/strokeWidth} 
-        y={5 + 0.3/strokeWidth} 
-        fill={yAxisColor} 
-        fontSize={0.2/strokeWidth}
-        style={{ transform: `scale(${strokeWidth}, ${strokeWidth})` }}
-      >
-        Y
-      </text>
-      
-      {/* Origin marker */}
+      {/* Simple origin marker */}
       <circle
         cx={0}
         cy={0}
-        r={0.1/strokeWidth}
+        r={0.05/strokeWidth}
         fill="#ffffff"
         stroke="#000000"
-        strokeWidth={0.02/strokeWidth}
+        strokeWidth={0.01/strokeWidth}
       />
     </>
   );

@@ -6,7 +6,6 @@ import DxfEntity from './entities/DxfEntity';
 interface CanvasProps {
   dxfData: DXFData | null;
   layerVisibility: LayerVisibility;
-  componentVisibility: Record<string, Record<string, boolean>>;
   selectedFeature: SelectedFeature | null;
   onFeatureSelect: (feature: SelectedFeature | null) => void;
   rendererConfig?: any;
@@ -19,7 +18,6 @@ interface CanvasProps {
 const Canvas: React.FC<CanvasProps> = ({
   dxfData,
   layerVisibility,
-  componentVisibility,
   selectedFeature,
   onFeatureSelect,
   rendererConfig = {}
@@ -90,6 +88,11 @@ const Canvas: React.FC<CanvasProps> = ({
     }
   }, [dxfData]);
   
+  // Debug visibility
+  React.useEffect(() => {
+    console.log('[CANVAS] Layer visibility:', layerVisibility);
+  }, [layerVisibility]);
+
   // Prepare flat list of entities from DXF data with IDs
   const entities = React.useMemo(() => {
     if (!dxfData) return [];
@@ -99,22 +102,13 @@ const Canvas: React.FC<CanvasProps> = ({
       // Skip invisible layers
       if (!layerVisibility[layerName]) return;
       
-      entities.forEach((entity, index) => {
-        const id = entity.handle;
-        // Skip invisible components
-        if (
-          componentVisibility[layerName] && 
-          componentVisibility[layerName][id] === false
-        ) {
-          return;
-        }
-        
-        // Add to visible entities list
+      // Add all entities from visible layers
+      entities.forEach((entity) => {
         result.push(entity);
       });
     });
     return result;
-  }, [dxfData, layerVisibility, componentVisibility]);
+  }, [dxfData, layerVisibility]);
 
   // Calculate bounding box of all entities
   useEffect(() => {
@@ -492,14 +486,16 @@ const Canvas: React.FC<CanvasProps> = ({
             </g>
           )}
           
-          {/* Origin axes */}
-          <OriginAxes 
-            halfWidth={Math.max(boundingBox.width / 2, 100)} 
-            halfHeight={Math.max(boundingBox.height / 2, 100)} 
-            xAxisColor={rendererConfig.xAxisColor || '#ff5555'} 
-            yAxisColor={rendererConfig.yAxisColor || '#55ff55'} 
-            strokeWidth={1 / scale} // Adjust stroke width based on scale
-          />
+          {/* Origin axes - only render if Origin & Axes layer is visible */}
+          {layerVisibility['Origin & Axes'] && (
+            <OriginAxes 
+              halfWidth={Math.max(boundingBox.width / 2, 100)} 
+              halfHeight={Math.max(boundingBox.height / 2, 100)} 
+              xAxisColor={rendererConfig.xAxisColor || '#ff5555'} 
+              yAxisColor={rendererConfig.yAxisColor || '#55ff55'} 
+              strokeWidth={1 / scale} // Adjust stroke width based on scale
+            />
+          )}
 
           {/* Render bounding box for debugging */}
           {rendererConfig.showBoundingBox && (

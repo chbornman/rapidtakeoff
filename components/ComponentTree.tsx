@@ -7,8 +7,6 @@ interface ComponentTreeProps {
   onFeatureSelect?: (feature: SelectedFeature | null) => void;
   /** Optional callback to change layer visibility, integrated into the component tree */
   onLayerVisibilityChange?: (visibility: LayerVisibility) => void;
-  /** Optional callback to change component visibility, integrated into the component tree */
-  onComponentVisibilityChange?: (visibility: Record<string, Record<string, boolean>>) => void;
 }
 
 // Default tree data for when no file is loaded (show origin axes)
@@ -117,7 +115,6 @@ export default function FileComponentTree({
   filePath, 
   onFeatureSelect,
   onLayerVisibilityChange,
-  onComponentVisibilityChange,
 }: ComponentTreeProps) {
   const [treeData, setTreeData] = React.useState<Record<string, Entity[]>>({});
   const [loading, setLoading] = React.useState(false);
@@ -125,18 +122,13 @@ export default function FileComponentTree({
   const [selectedFeature, setSelectedFeature] = React.useState<SelectedFeature | null>(null);
   // State to track which sections have been manually opened
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({});
-  // Local visibility state for layers and components
-  const [layerVisibilityLocal, setLayerVisibilityLocal] = React.useState<LayerVisibility>({});
-  const [componentVisibilityLocal, setComponentVisibilityLocal] = React.useState<Record<string, Record<string, boolean>>>({});
-  // Compute global set of entity types across all layers
-  const globalTypes = React.useMemo(() => {
-    const typesSet = new Set<string>();
-    Object.entries(treeData).forEach(([layer, entities]) => {
-      const typesMap = groupByType(entities);
-      Object.keys(typesMap).forEach(t => typesSet.add(t));
-    });
-    return Array.from(typesSet);
-  }, [treeData]);
+  // Define a constant for the Origin & Axes layer name
+  const ORIGIN_AXES_LAYER = 'Origin & Axes';
+  
+  // Local visibility state for layers
+  const [layerVisibilityLocal, setLayerVisibilityLocal] = React.useState<LayerVisibility>({
+    [ORIGIN_AXES_LAYER]: true  // Initialize with Origin & Axes visible
+  });
 
   React.useEffect(() => {
     if (!filePath) {
@@ -233,45 +225,27 @@ export default function FileComponentTree({
     
     // Check if we need to initialize visibility (only do this once for new data)
     const needsInitialization = Object.keys(treeData).some(layer => 
-      layerVisibilityLocal[layer] === undefined || 
-      !componentVisibilityLocal[layer]
+      layerVisibilityLocal[layer] === undefined
     );
     
     if (!needsInitialization) return;
 
     // Initialize layer visibility (including Origin Axes layer)
     const lv: LayerVisibility = { ...layerVisibilityLocal };
-    if (lv['Origin & Axes'] === undefined) lv['Origin & Axes'] = true;
+    // Always ensure Origin & Axes has a defined value 
+    lv[ORIGIN_AXES_LAYER] = lv[ORIGIN_AXES_LAYER] !== false;
     
-    const cv: Record<string, Record<string, boolean>> = { ...componentVisibilityLocal };
-    
-    // Process entity visibility by layer and type
-    Object.entries(treeData).forEach(([layer, entities]) => {
+    // Process layer visibility
+    Object.entries(treeData).forEach(([layer]) => {
       // Set default layer visibility to true if not already set
       if (lv[layer] === undefined) {
         lv[layer] = true;
       }
-      
-      // Initialize component visibility for this layer if needed
-      if (!cv[layer]) {
-        cv[layer] = {};
-      }
-      
-      // For each entity, set initial visibility if not already set
-      entities.forEach((entity, idx) => {
-        const entityKey = `${layer}:${entity.type}:${idx}`;
-        // Only set if not already defined
-        if (cv[layer][entityKey] === undefined) {
-          cv[layer][entityKey] = true;
-        }
-      });
     });
     
     setLayerVisibilityLocal(lv);
-    setComponentVisibilityLocal(cv);
     if (onLayerVisibilityChange) onLayerVisibilityChange(lv);
-    if (onComponentVisibilityChange) onComponentVisibilityChange?.(cv);
-  }, [treeData, onLayerVisibilityChange, onComponentVisibilityChange]);
+  }, [treeData, onLayerVisibilityChange]);
 
   // Handle external selection updates (when feature is selected from canvas)
   React.useEffect(() => {
@@ -345,9 +319,10 @@ export default function FileComponentTree({
         isOpen={false}
         onToggle={handleSectionToggle}
         openState={isSectionOpen("Origin Axes-")}
-        visible={layerVisibilityLocal['Origin & Axes']}
+        visible={layerVisibilityLocal[ORIGIN_AXES_LAYER]}
         onVisibilityToggle={() => {
-          const newLV = { ...layerVisibilityLocal, 'Origin & Axes': !layerVisibilityLocal['Origin & Axes'] };
+          console.log('[DEBUG] Toggling Origin Axes visibility:', !layerVisibilityLocal[ORIGIN_AXES_LAYER]);
+          const newLV = { ...layerVisibilityLocal, [ORIGIN_AXES_LAYER]: !layerVisibilityLocal[ORIGIN_AXES_LAYER] };
           setLayerVisibilityLocal(newLV);
           onLayerVisibilityChange?.(newLV);
         }}
@@ -392,21 +367,6 @@ export default function FileComponentTree({
                   const newLV = { ...layerVisibilityLocal, [layer]: newLayerVisible };
                   setLayerVisibilityLocal(newLV);
                   
-                  // When hiding a layer, hide all entities within it
-                  if (!newLayerVisible) {
-                    // Create updated component visibility map
-                    const newCV = { ...componentVisibilityLocal };
-                    
-                    // If the layer is hidden, hide all components in this layer
-                    if (newCV[layer]) {
-                      Object.keys(newCV[layer]).forEach(entityKey => {
-                        newCV[layer][entityKey] = false;
-                      });
-                      setComponentVisibilityLocal(newCV);
-                      onComponentVisibilityChange?.(newCV);
-                    }
-                  }
-                  
                   // Propagate layer visibility change
                   onLayerVisibilityChange?.(newLV);
                 }}
@@ -414,25 +374,6 @@ export default function FileComponentTree({
                 {Object.entries(typesMap).map(([type, ents]) => {
                   const typeId = `${type}-${ents.length}`;
                   
-                  // Type-level visibility: toggle all features of this type
-                  const featureKeys = ents.map((_, idx) => `${layer}:${type}:${idx}`);
-                  const allVisible = featureKeys.every(k => componentVisibilityLocal[layer]?.[k]);
-                  const toggleTypeVisibility = () => {
-                    // Only allow visibility toggle if parent layer is visible
-                    if (!layerVisibilityLocal[layer] && allVisible === false) {
-                      // If trying to show entities in a hidden layer, make the layer visible first
-                      const newLV = { ...layerVisibilityLocal, [layer]: true };
-                      setLayerVisibilityLocal(newLV);
-                      onLayerVisibilityChange?.(newLV);
-                    }
-                    
-                    // Toggle visibility for all entities of this type
-                    const newCV = { ...componentVisibilityLocal };
-                    newCV[layer] = { ...newCV[layer] };
-                    featureKeys.forEach(k => { newCV[layer][k] = !allVisible; });
-                    setComponentVisibilityLocal(newCV);
-                    onComponentVisibilityChange?.(newCV);
-                  };
                   return (
                     <TreeDetail 
                       key={type}
@@ -442,8 +383,6 @@ export default function FileComponentTree({
                       isOpen={false}
                       onToggle={handleSectionToggle}
                       openState={isSectionOpen(typeId)}
-                      visible={allVisible}
-                      onVisibilityToggle={toggleTypeVisibility}
                     >
                       <div className="space-y-2">
                         {ents.map((entity, idx) => {
@@ -464,24 +403,6 @@ export default function FileComponentTree({
                               onClick={() => handleFeatureSelect(layer, type, idx, entity)}
                               onToggle={handleSectionToggle}
                               openState={isSectionOpen(featureId)}
-                              visible={componentVisibilityLocal[layer]?.[`${layer}:${type}:${idx}`]}
-                              onVisibilityToggle={() => {
-                                const entityKey = `${layer}:${type}:${idx}`;
-                                const newVisible = !componentVisibilityLocal[layer]?.[entityKey];
-                                
-                                // If showing an entity in a hidden layer, make the layer visible first
-                                if (newVisible && !layerVisibilityLocal[layer]) {
-                                  const newLV = { ...layerVisibilityLocal, [layer]: true };
-                                  setLayerVisibilityLocal(newLV);
-                                  onLayerVisibilityChange?.(newLV);
-                                }
-                                
-                                // Update entity visibility
-                                const newCV = { ...componentVisibilityLocal };
-                                newCV[layer] = { ...newCV[layer], [entityKey]: newVisible };
-                                setComponentVisibilityLocal(newCV);
-                                onComponentVisibilityChange?.(newCV);
-                              }}
                             >
                               <div 
                                 className={`${isSelected ? 'bg-red-900 bg-opacity-20' : 'bg-white bg-opacity-10'} rounded-md p-2 text-xs space-y-1.5 cursor-pointer`}
@@ -518,75 +439,6 @@ export default function FileComponentTree({
         </TreeDetail>
       )}
       
-      {/* Global Entity Type Visibility Toggles */}
-      <div className="p-2 border-t border-gray-700">
-        <div className="font-medium mb-1">Entity Types</div>
-        {globalTypes.map(type => {
-          // keys for this type across all layers
-          const keysForType = layers.flatMap(([layer, entities]) => {
-            const entsOfType = groupByType(entities)[type] || [];
-            return entsOfType.map((_, idx) => `${layer}:${type}:${idx}`);
-          });
-          const allVisibleType = keysForType.every(keyStr => {
-            const [layerName] = keyStr.split(':');
-            return componentVisibilityLocal[layerName]?.[keyStr];
-          });
-          const toggleGlobalType = () => {
-            const newVisible = !allVisibleType;
-            const newCV = { ...componentVisibilityLocal };
-            
-            // If showing entities, make sure their layers are visible too
-            if (newVisible) {
-              const affectedLayers = new Set<string>();
-              
-              // Collect all layers that have this entity type
-              layers.forEach(([layer, entities]) => {
-                const entsOfType = groupByType(entities)[type] || [];
-                if (entsOfType.length > 0) {
-                  affectedLayers.add(layer);
-                }
-              });
-              
-              // Make sure all affected layers are visible
-              if (affectedLayers.size > 0) {
-                const newLV = { ...layerVisibilityLocal };
-                affectedLayers.forEach(layer => {
-                  newLV[layer] = true;
-                });
-                setLayerVisibilityLocal(newLV);
-                onLayerVisibilityChange?.(newLV);
-              }
-            }
-            
-            // Toggle visibility for all entities of this type across all layers
-            layers.forEach(([layer, entities]) => {
-              const entsOfType = groupByType(entities)[type] || [];
-              if (entsOfType.length > 0) {
-                newCV[layer] = { ...newCV[layer] };
-                entsOfType.forEach((_, idx) => {
-                  const key = `${layer}:${type}:${idx}`;
-                  newCV[layer][key] = newVisible;
-                });
-              }
-            });
-            
-            setComponentVisibilityLocal(newCV);
-            onComponentVisibilityChange?.(newCV);
-          };
-          return (
-            <div key={type} className="flex items-center justify-between mb-1">
-              <span className="truncate">{type}</span>
-              <button
-                onClick={toggleGlobalType}
-                className="p-1 rounded hover:bg-gray-700"
-                aria-label={allVisibleType ? 'Hide all' : 'Show all'}
-              >
-                {allVisibleType ? <Eye size={14} /> : <EyeOff size={14} />}
-              </button>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

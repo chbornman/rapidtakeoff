@@ -33,9 +33,8 @@ export default function Home() {
   const [dxfFilePath, setDxfFilePath] = useState<string | null>(null);
   const [dxfData, setDxfData] = useState<DXFData | null>(null);
   // Track visibility of layers, including special Origin & Axes layer
-  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ 'Origin & Axes': true });
-  // Track visibility of individual components per layer
-  const [componentVisibility, setComponentVisibility] = useState<Record<string, Record<string, boolean>>>({});
+  const ORIGIN_AXES_LAYER = 'Origin & Axes';
+  const [layerVisibility, setLayerVisibility] = useState<LayerVisibility>({ [ORIGIN_AXES_LAYER]: true });
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   const [rendererConfig, setRendererConfig] = useState<any>({});
@@ -179,18 +178,6 @@ export default function Home() {
       });
       setLayerVisibility(initialVisibility);
       
-      // Initialize component visibility using entity handles as unique IDs
-      const initialCompVis: Record<string, Record<string, boolean>> = {};
-      Object.entries(data).forEach(([layerName, entities]) => {
-        initialCompVis[layerName] = {};
-        entities.forEach((entity) => {
-          // Use entity.handle as the unique identifier if available
-          const id = entity.handle || `${layerName}:${entity.type}:${Math.random().toString(36).substr(2, 9)}`;
-          initialCompVis[layerName][id] = true;
-        });
-      });
-      setComponentVisibility(initialCompVis);
-      
       // Reset selected feature
       setSelectedFeature(null);
       
@@ -209,18 +196,13 @@ export default function Home() {
   const handleFileClose = useCallback(() => {
     setDxfFilePath(null);
     setDxfData(null);
-    setLayerVisibility({ 'Origin & Axes': true });
-    setComponentVisibility({});
+    setLayerVisibility({ [ORIGIN_AXES_LAYER]: true });
     setSelectedFeature(null);
-  }, []);
+  }, [ORIGIN_AXES_LAYER]);
   
   // Handle layer visibility changes
   const handleLayerVisibilityChange = useCallback((visibility: LayerVisibility) => {
     setLayerVisibility(visibility);
-  }, []);
-  // Handle component visibility changes
-  const handleComponentVisibilityChange = useCallback((visibility: Record<string, Record<string, boolean>>) => {
-    setComponentVisibility(visibility);
   }, []);
 
   return (
@@ -237,7 +219,6 @@ export default function Home() {
           filePath={dxfFilePath}
           onFeatureSelect={setSelectedFeature}
           onLayerVisibilityChange={handleLayerVisibilityChange}
-          onComponentVisibilityChange={handleComponentVisibilityChange}
           onFileClose={handleFileClose}
         />
       </ResizablePanel>
@@ -255,7 +236,6 @@ export default function Home() {
           <Canvas
             dxfData={dxfData}
             layerVisibility={layerVisibility}
-            componentVisibility={componentVisibility}
             selectedFeature={selectedFeature}
             onFeatureSelect={setSelectedFeature}
             rendererConfig={rendererConfig}
