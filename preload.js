@@ -9,4 +9,12 @@ contextBridge.exposeInMainWorld('electron', {
   parseDXFTree: (filePath) => ipcRenderer.invoke('parse-dxf-tree', filePath),
   // Get renderer configuration from JSON file
   getRendererConfig: () => ipcRenderer.invoke('get-renderer-config'),
+  // Listen for config file changes
+  onConfigFileChanged: (callback) => {
+    ipcRenderer.on('config-file-changed', callback);
+    // Return a cleanup function to remove the listener
+    return () => {
+      ipcRenderer.removeListener('config-file-changed', callback);
+    };
+  },
 });

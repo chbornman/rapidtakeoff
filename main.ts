@@ -1,6 +1,13 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const chokidar = require('chokidar');
+
+// Track the main application window
+let mainWindow = null;
+
+// Define the path to the unified config file for use throughout the app
+const configPath = path.join(__dirname, 'constants', 'component_renderer_config.json');
 
 function createWindow() {
   // In development (when not packaged), start Next.js dev server URL
@@ -9,7 +16,7 @@ function createWindow() {
     ? 'http://localhost:3000'
     : `file://${path.join(__dirname, '.next', 'server', 'pages', 'index.html')}`;
 
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -19,13 +26,44 @@ function createWindow() {
   });
 
   // Enable logging from renderer process to main process console
-  win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     const levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR'];
     const prefix = levels[level] || 'LOG';
     console.log(`[RENDERER ${prefix}] ${message}`);
   });
 
-  win.loadURL(startURL);
+  // Set up file watcher for the renderer config file (only in development)
+  if (isDev) {
+    setupConfigWatcher();
+  }
+
+  mainWindow.loadURL(startURL);
+}
+
+// Watch for changes to the renderer config file
+function setupConfigWatcher() {
+  console.log(`[MAIN] Setting up watcher for config file: ${configPath}`);
+  
+  const watcher = chokidar.watch(configPath, {
+    persistent: true,
+    ignoreInitial: true,
+    awaitWriteFinish: {
+      stabilityThreshold: 300,
+      pollInterval: 100
+    }
+  });
+
+  watcher.on('change', (path) => {
+    console.log(`[MAIN] Detected change in config file: ${path}`);
+    // Notify the renderer process that the config has changed
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('config-file-changed');
+    }
+  });
+
+  watcher.on('error', (error) => {
+    console.error(`[MAIN] Error watching config file: ${error}`);
+  });
 }
 
 app.whenReady().then(createWindow);
@@ -38,18 +76,16 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
-// Add handler to get component renderer config from JSON file
+// Add handler to get unified config from JSON file
 ipcMain.handle('get-renderer-config', async () => {
-  const configPath = path.join(__dirname, 'constants', 'component_renderer_config.json');
-  
   try {
     if (!fs.existsSync(configPath)) {
-      throw new Error(`Component renderer config file not found: ${configPath}`);
+      throw new Error(`Config file not found: ${configPath}`);
     }
     const configData = fs.readFileSync(configPath, 'utf8');
     return JSON.parse(configData);
   } catch (error) {
-    console.error('Error loading component renderer config:', error);
+    console.error('Error loading configuration:', error);
     throw error; // Propagate error to renderer
   }
 });

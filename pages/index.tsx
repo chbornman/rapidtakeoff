@@ -23,6 +23,7 @@ declare global {
       openFileDialog: () => Promise<{ canceled: boolean; filePaths: string[] }>;
       parseDXFTree: (filePath: string, config?: any) => Promise<string>;
       getRendererConfig: () => Promise<any>;
+      onConfigFileChanged: (callback: () => void) => () => void;
     };
   }
 }
@@ -45,6 +46,7 @@ export default function Home() {
       try {
         const config = await window.electron.getRendererConfig();
         if (config) {
+          console.log('[REACT] Loaded renderer config');
           setRendererConfig(config);
           setConfigError(null);
         } else {
@@ -55,7 +57,20 @@ export default function Home() {
         setConfigError(`Configuration error: ${error instanceof Error ? error.message : String(error)}`);
       }
     };
+    
+    // Load config initially
     loadConfig();
+    
+    // Set up listener for config file changes
+    const removeListener = window.electron.onConfigFileChanged(() => {
+      console.log('[REACT] Detected config file change, reloading config');
+      loadConfig();
+    });
+    
+    // Clean up listener when component unmounts
+    return () => {
+      removeListener();
+    };
   }, []);
 
   // Log the selected feature for debugging
@@ -65,6 +80,48 @@ export default function Home() {
 
   // State to track file loading status to prevent duplicate processing
   const [isLoading, setIsLoading] = useState(false);
+
+  // Function to parse DXF data with the current config
+  const parseDXFWithConfig = useCallback(async (filePath: string, config: any) => {
+    console.log('[REACT] Sending file to be parsed with config', config);
+    const result = await window.electron.parseDXFTree(filePath, config);
+    console.log(`[REACT] Received parsed DXF data (${result.length} bytes)`);
+    
+    console.time('[REACT] JSON parsing');
+    const data = JSON.parse(result) as DXFData;
+    console.timeEnd('[REACT] JSON parsing');
+    
+    console.log(`[REACT] DXF data parsed with ${Object.keys(data).length} layers`);
+    const entityCount = Object.values(data).reduce((sum, entities) => sum + entities.length, 0);
+    console.log(`[REACT] Total entity count: ${entityCount}`);
+    
+    return data;
+  }, []);
+
+  // Effect to reload the current DXF file when the config changes
+  useEffect(() => {
+    // Only reload if we have a file already loaded
+    if (dxfFilePath && rendererConfig && Object.keys(rendererConfig).length > 0) {
+      console.log('[REACT] Config changed, reloading current DXF file');
+      
+      // Don't reload if we're already loading another file
+      if (isLoading) return;
+      
+      // Set loading state to prevent duplicate processing
+      setIsLoading(true);
+      
+      // Re-parse the DXF with the new config
+      parseDXFWithConfig(dxfFilePath, rendererConfig)
+        .then(data => {
+          setDxfData(data);
+          setIsLoading(false);
+        })
+        .catch(err => {
+          console.error('[REACT] Failed to reload DXF with new config:', err);
+          setIsLoading(false);
+        });
+    }
+  }, [rendererConfig, dxfFilePath, isLoading, parseDXFWithConfig]);
 
   // Handle selecting a new DXF file: parse the DXF data
   const handleFileSelect = async (filePath: string) => {
@@ -82,7 +139,7 @@ export default function Home() {
     try {
       // Make sure we have the renderer config first
       let config = rendererConfig;
-      if (!config) {
+      if (!config || Object.keys(config).length === 0) {
         try {
           console.log('[REACT] No renderer config loaded yet, getting from main process');
           config = await window.electron.getRendererConfig();
@@ -95,17 +152,7 @@ export default function Home() {
       }
       
       // Parse DXF tree data with renderer config
-      console.log('[REACT] Sending file to be parsed with config', config);
-      const result = await window.electron.parseDXFTree(filePath, config);
-      console.log(`[REACT] Received parsed DXF data (${result.length} bytes)`);
-      
-      console.time('[REACT] JSON parsing');
-      const data = JSON.parse(result) as DXFData;
-      console.timeEnd('[REACT] JSON parsing');
-      
-      console.log(`[REACT] DXF data parsed with ${Object.keys(data).length} layers`);
-      const entityCount = Object.values(data).reduce((sum, entities) => sum + entities.length, 0);
-      console.log(`[REACT] Total entity count: ${entityCount}`);
+      const data = await parseDXFWithConfig(filePath, config);
       setDxfData(data);
       
       // File processing complete
@@ -197,14 +244,7 @@ export default function Home() {
             componentVisibility={componentVisibility}
             selectedFeature={selectedFeature}
             onFeatureSelect={setSelectedFeature}
-            rendererConfig={{
-              ...rendererConfig,
-              initialScaleFactor: 10, // Increase scale factor for better visibility
-              showGrid: true,         // Show coordinate grid
-              xAxisColor: '#ff5555',  // Bright red X axis
-              yAxisColor: '#55ff55',  // Bright green Y axis
-              backgroundColor: '#222222' // Darker background for better contrast
-            }}
+            rendererConfig={rendererConfig}
           />
         )}
       </div>

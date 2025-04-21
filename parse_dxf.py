@@ -75,7 +75,11 @@ def parse_dxf(filepath: str, config: Optional[Dict[str, Any]] = None) -> Dict[st
     """
     sys.stderr.write(f'[PYTHON] Starting to parse DXF file: {filepath}\n')
     if config:
-        sys.stderr.write(f'[PYTHON] Using config: {config}\n')
+        sys.stderr.write(f'[PYTHON] Using config\n')
+        # Extract SVG-specific config if available
+        svg_config = config.get('svg', {}) if isinstance(config, dict) else {}
+        if svg_config:
+            sys.stderr.write(f'[PYTHON] Found SVG config section with {len(svg_config)} parameters\n')
     
     try:
         sys.stderr.write('[PYTHON] Reading DXF file with ezdxf\n')
