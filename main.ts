@@ -193,6 +193,7 @@ ipcMain.handle('parse-dxf-tree', async (event, filePath, config = null) => {
   
   // Add config if provided
   if (config) {
+    console.log('[MAIN] Adding config to Python args');
     args.push('--config', JSON.stringify(config));
   }
   

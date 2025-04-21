@@ -83,7 +83,7 @@ export default function Home() {
 
   // Function to parse DXF data with the current config
   const parseDXFWithConfig = useCallback(async (filePath: string, config: any) => {
-    console.log('[REACT] Sending file to be parsed with config', config);
+    console.log('[REACT] Sending file to be parsed with config');
     const result = await window.electron.parseDXFTree(filePath, config);
     console.log(`[REACT] Received parsed DXF data (${result.length} bytes)`);
     
@@ -98,11 +98,22 @@ export default function Home() {
     return data;
   }, []);
 
+  // Use a ref to track the previous config to avoid unnecessary reloads
+  const prevConfigRef = React.useRef<string>("");
+  
   // Effect to reload the current DXF file when the config changes
   useEffect(() => {
-    // Only reload if we have a file already loaded
-    if (dxfFilePath && rendererConfig && Object.keys(rendererConfig).length > 0) {
+    // Stringify config for comparison
+    const configStr = JSON.stringify(rendererConfig);
+    
+    // Only reload if we have a file already loaded and the config actually changed
+    if (dxfFilePath && 
+        rendererConfig && 
+        Object.keys(rendererConfig).length > 0 && 
+        configStr !== prevConfigRef.current) {
+      
       console.log('[REACT] Config changed, reloading current DXF file');
+      prevConfigRef.current = configStr;
       
       // Don't reload if we're already loading another file
       if (isLoading) return;
@@ -120,6 +131,9 @@ export default function Home() {
           console.error('[REACT] Failed to reload DXF with new config:', err);
           setIsLoading(false);
         });
+    } else if (configStr !== prevConfigRef.current) {
+      // Just update the ref if we don't need to reload
+      prevConfigRef.current = configStr;
     }
   }, [rendererConfig, dxfFilePath, isLoading, parseDXFWithConfig]);
 

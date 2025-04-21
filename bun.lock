@@ -5,6 +5,7 @@
       "name": "rapidtakeoff-electron",
       "dependencies": {
         "@heroicons/react": "^2.2.0",
+        "chokidar": "^3.6.0",
         "electron": "^25.0.0",
         "next": "^13.5.0",
         "react": "^18.2.0",
